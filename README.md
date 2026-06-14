@@ -1,9 +1,10 @@
 # MyStremio
 
-Known Bugs: Custom Library Items show on Board after clicking them once.
-PS CTRL+R might fix your problem.
-
 **MyStremio** is a customized Windows desktop client based on the Stremio shell. It bundles enhanced playback, interface tweaks, library collections, Discord Rich Presence, and many plugins — all in one installer.
+
+Known Bugs: Custom Library Items show on Board after clicking them once. 
+
+PS CTRL+R might fix your problem.
 
 > **Disclaimer:** MyStremio is an independent community project. It is not affiliated with or endorsed by Stremio AG.
 
