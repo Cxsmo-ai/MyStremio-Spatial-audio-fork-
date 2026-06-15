@@ -135,6 +135,11 @@
       currentTheme: getCurrentTheme(),
       autoskip: getAutoskipPreferences(),
       metadataAddon: getMetadataAddon(),
+      language: getLanguagePreferences(),
+      onboarding: {
+        tmdbNoticeShown: localStorage.getItem(TMDB_NOTICE_KEY) === 'true',
+        defaultsApplied: localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true',
+      },
     }).catch(() => {});
   }
 
@@ -147,6 +152,23 @@
   const LIQUID_GLASS_THEME = 'liquid-glass.theme.css';
   const HORIZONTAL_NAV_PLUGIN = 'interface/horizontal-navigation.plugin.js';
   const METADATA_ADDON_KEY = 'stremio-custom-metadata-addon';
+  const LANGUAGE_KEYS = {
+    favAudio: 'stremio-custom-fav-audio',
+    activeAudio: 'stremio-custom-active-audio',
+    favSubs: 'stremio-custom-fav-subs',
+    activeSubs: 'stremio-custom-active-subs',
+  };
+  const TMDB_NOTICE_KEY = 'stremio-custom-tmdb-notice-shown-v211d';
+  const DEFAULTS_APPLIED_KEY = 'stremio-custom-defaults-applied-v211a';
+  const DEFAULT_PLUGIN_PATTERNS = [
+    /context[-_ ]?menu[-_ ]?fix/i,
+    /enhanced[-_ ]?covers/i,
+    /enhanced[-_ ]?title(?:bar)?/i,
+    /dynamic[-_ ]?hero/i,
+    /hero[-_ ]?div/i,
+    /data[-_ ]?enrichment/i,
+    /meta[-_ ]?hover/i,
+  ];
 
   let autoskipCache = { intro: false, credits: false, recap: false };
   let autoskipReady = false;
@@ -231,6 +253,43 @@
     } catch (_) {}
     persistUserPreferences();
     document.dispatchEvent(new CustomEvent('stremio-custom-metadata-addon-changed', { detail: { value: next } }));
+  }
+
+  function readJsonList(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function getLanguagePreferences() {
+    return {
+      favAudio: readJsonList(LANGUAGE_KEYS.favAudio),
+      activeAudio: localStorage.getItem(LANGUAGE_KEYS.activeAudio) || '',
+      favSubs: readJsonList(LANGUAGE_KEYS.favSubs),
+      activeSubs: localStorage.getItem(LANGUAGE_KEYS.activeSubs) || '',
+    };
+  }
+
+  function applyLanguagePreferences(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (Array.isArray(prefs.favAudio)) {
+      localStorage.setItem(LANGUAGE_KEYS.favAudio, JSON.stringify(prefs.favAudio));
+    }
+    if (Array.isArray(prefs.favSubs)) {
+      localStorage.setItem(LANGUAGE_KEYS.favSubs, JSON.stringify(prefs.favSubs));
+    }
+    if (typeof prefs.activeAudio === 'string') {
+      if (prefs.activeAudio) localStorage.setItem(LANGUAGE_KEYS.activeAudio, prefs.activeAudio);
+      else localStorage.removeItem(LANGUAGE_KEYS.activeAudio);
+    }
+    if (typeof prefs.activeSubs === 'string') {
+      if (prefs.activeSubs) localStorage.setItem(LANGUAGE_KEYS.activeSubs, prefs.activeSubs);
+      else localStorage.removeItem(LANGUAGE_KEYS.activeSubs);
+    }
   }
 
   function removeHorizontalNavPluginFromEnabled() {
@@ -375,6 +434,8 @@
       const diskTheme = typeof preferences?.currentTheme === 'string' ? preferences.currentTheme : '';
       const diskMetadataAddon =
         typeof preferences?.metadataAddon === 'string' ? preferences.metadataAddon : '';
+      const diskLanguage = preferences?.language;
+      const diskOnboarding = preferences?.onboarding;
       const localPlugins = getEnabledPlugins();
       const localTheme = getCurrentTheme();
       const hasDiskState = diskPlugins.length > 0 || diskTheme.length > 0;
@@ -391,6 +452,13 @@
         localStorage.setItem('enabledPlugins', '[]');
         localStorage.setItem('currentTheme', LIQUID_GLASS_THEME);
       }
+      if (diskLanguage && typeof diskLanguage === 'object') {
+        applyLanguagePreferences(diskLanguage);
+      }
+      if (diskOnboarding && typeof diskOnboarding === 'object') {
+        if (diskOnboarding.tmdbNoticeShown === true) localStorage.setItem(TMDB_NOTICE_KEY, 'true');
+        if (diskOnboarding.defaultsApplied === true) localStorage.setItem(DEFAULTS_APPLIED_KEY, 'true');
+      }
 
       await loadAutoskipSettings();
 
@@ -399,6 +467,11 @@
         currentTheme: getCurrentTheme(),
         autoskip: getAutoskipPreferences(),
         metadataAddon: getMetadataAddon(),
+        language: getLanguagePreferences(),
+        onboarding: {
+          tmdbNoticeShown: localStorage.getItem(TMDB_NOTICE_KEY) === 'true',
+          defaultsApplied: localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true',
+        },
       }).catch(() => {});
     } catch (_) {
       await loadAutoskipSettings().catch(() => {});
@@ -686,6 +759,164 @@
     }
   }
 
+  async function ensureDefaultPluginsEnabled() {
+    const all = await api.listPlugins();
+    if (!Array.isArray(all) || !all.length) return;
+    const enabled = await migrateEnabledPlugins();
+    const next = new Set(enabled);
+    let changed = false;
+    for (const pattern of DEFAULT_PLUGIN_PATTERNS) {
+      const match = all.find((ref) => pattern.test(String(ref || '')));
+      if (match && !next.has(match)) {
+        next.add(match);
+        changed = true;
+      }
+    }
+    const merged = Array.from(next);
+    if (changed || merged.length !== enabled.length) {
+      setEnabledPlugins(merged);
+      await ensurePluginsLoadedForRoute();
+    }
+    localStorage.setItem(DEFAULTS_APPLIED_KEY, 'true');
+    persistUserPreferences();
+  }
+
+  async function maybeShowTmdbFirstRunNotice() {
+    try {
+      const config = await api.getPluginConfig('data-enrichment');
+      const tmdb = String(config?.tmdbApiKey || '').trim();
+      const hasTmdb = /^[a-f0-9]{16,}$/i.test(tmdb);
+      if (hasTmdb) {
+        localStorage.setItem(TMDB_NOTICE_KEY, 'true');
+        persistUserPreferences();
+        return;
+      }
+    } catch (_) {}
+    if (document.getElementById('stremio-custom-tmdb-notice')) return;
+    if (!document.getElementById('stremio-custom-native-toast-style')) {
+      const style = document.createElement('style');
+      style.id = 'stremio-custom-native-toast-style';
+      style.textContent = `
+        .stremio-custom-native-toast {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 300010;
+          max-width: min(28rem, 84vw);
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          color: var(--primary-foreground-color, #f4f4f4);
+          background: rgba(22, 22, 22, 0.95);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.42);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          transform: translateY(-6px);
+          opacity: 0;
+          transition: transform 120ms ease, opacity 120ms ease;
+        }
+        .stremio-custom-native-toast.show {
+          transform: translateY(0);
+          opacity: 1;
+        }
+        .stremio-custom-native-toast-icon {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(42, 144, 95, 0.95);
+          color: #eafff3;
+          font-size: 12px;
+          flex: none;
+          margin-top: 1px;
+        }
+        .stremio-custom-native-toast-message {
+          font-size: 12px;
+          line-height: 1.36;
+          flex: 1;
+          min-width: 0;
+          color: var(--primary-foreground-color, #f4f4f4);
+        }
+        .stremio-custom-native-toast-close {
+          all: unset;
+          cursor: pointer;
+          color: rgba(255, 255, 255, 0.78);
+          font-size: 14px;
+          line-height: 1;
+          flex: none;
+          padding-left: 4px;
+        }
+        .stremio-custom-native-toast-close:hover {
+          color: rgba(255, 255, 255, 1);
+        }
+      `;
+      (document.head || document.documentElement).appendChild(style);
+    }
+    const notice = document.createElement('div');
+    notice.id = 'stremio-custom-tmdb-notice';
+    notice.className = 'stremio-custom-native-toast';
+    notice.innerHTML = `
+      <span class="stremio-custom-native-toast-icon">&#10003;</span>
+      <div class="stremio-custom-native-toast-message">
+        Data Enrichment needs a TMDB API key. Add it in Settings > MyStremio > Plugins > Data Enrichment.
+      </div>
+      <button type="button" class="stremio-custom-native-toast-close" aria-label="Close">&#10005;</button>
+    `;
+    const closeBtn = notice.querySelector('.stremio-custom-native-toast-close');
+    closeBtn?.addEventListener('click', () => notice.remove());
+    document.body.appendChild(notice);
+    requestAnimationFrame(() => notice.classList.add('show'));
+    setTimeout(() => notice.remove(), 9000);
+    try {
+      localStorage.removeItem(TMDB_NOTICE_KEY);
+    } catch (_) {}
+    persistUserPreferences();
+  }
+
+  function installNavigationShield() {
+    return;
+    const SHIELD_ID = 'stremio-custom-nav-shield';
+    let hideTimer = null;
+    const ensure = () => {
+      let shield = document.getElementById(SHIELD_ID);
+      if (shield) return shield;
+      shield = document.createElement('div');
+      shield.id = SHIELD_ID;
+      shield.style.cssText =
+        'position:fixed;inset:0;z-index:120;opacity:0;display:none;pointer-events:none;' +
+        'transition:opacity 120ms ease;background:rgb(20,20,20);';
+      document.body.appendChild(shield);
+      return shield;
+    };
+    const showBrief = (ms = 220) => {
+      const shield = ensure();
+      if (!shield) return;
+      shield.style.display = 'block';
+      shield.style.opacity = '1';
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        shield.style.opacity = '0';
+        setTimeout(() => {
+          if (shield.style.opacity === '0') shield.style.display = 'none';
+        }, 140);
+      }, ms);
+    };
+    const watchRoute = () => {
+      showBrief(180);
+      if (/#\/player/.test(location.hash || '')) {
+        showBrief(320);
+      }
+    };
+    if (document.body) showBrief(420);
+    window.addEventListener('hashchange', watchRoute);
+    document.addEventListener('stremio-custom-bootstrap-ready', () => showBrief(120));
+  }
+
   window.StremioCustomAutoskip = {
     ...(window.StremioCustomAutoskip || {}),
     isEnabled(id) {
@@ -717,6 +948,7 @@
       getSettingsSectionsContainer,
       getNativeSettingsSections,
       removeLegacyQuickSettingsSection,
+      persistUserPreferences,
     },
     plugins: {
       loadPlugin,
@@ -742,7 +974,9 @@
   async function bootstrap() {
     hookShellMessages();
     injectPlaybackGuard();
+    installNavigationShield();
     await hydrateUserPreferences();
+    await ensureDefaultPluginsEnabled();
     removeHorizontalNavPluginFromEnabled();
     pathsCache = await api.getPaths();
     window.__stremioLanguageNames = await invoke('read-language-names');
@@ -759,6 +993,7 @@
     if (typeof window.__stremioCustomSubtitleSyncEnsure === 'function') {
       window.__stremioCustomSubtitleSyncEnsure();
     }
+    maybeShowTmdbFirstRunNotice();
     document.dispatchEvent(new CustomEvent('stremio-custom-bootstrap-ready'));
     setTimeout(() => {
       if (isOnSettingsPage()) {
@@ -837,7 +1072,7 @@
       if (isPlayerRoute()) return;
       await ensureThemeApplied();
       await ensurePluginsLoadedForRoute();
-    }, 800);
+    }, 1200);
   }
 
   window.addEventListener('hashchange', scheduleMaintenance);
@@ -846,7 +1081,7 @@
       return;
     }
     if (!isPlayerRoute()) scheduleMaintenance();
-  }, 15000);
+  }, 30000);
 
   console.info('[StremioCustom] Bootstrap loaded');
 })();

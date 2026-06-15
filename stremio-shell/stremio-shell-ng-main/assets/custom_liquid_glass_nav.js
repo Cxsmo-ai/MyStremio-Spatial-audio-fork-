@@ -23,19 +23,8 @@
     root.querySelectorAll('a[href^="#"]').forEach((link) => {
       if (link.dataset.scNavWired === '1') return;
       link.dataset.scNavWired = '1';
-      const href = link.getAttribute('href');
-      if (!href || href === '#') return;
       link.style.pointerEvents = 'auto';
       link.style.cursor = 'pointer';
-      link.addEventListener(
-        'click',
-        (event) => {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          navigateToHash(href);
-        },
-        true
-      );
     });
   }
 
@@ -66,7 +55,9 @@
       }
       const originalParent = cachedNavbars.get(verticalNav);
 
-      const horizontalNav = verticalNav.closest('div')?.querySelector('[class*="horizontal-nav-bar"]');
+      const horizontalNav = verticalNav
+        .closest('[class*="main-nav-bars-container"], [class*="nav-bars-container"]')
+        ?.querySelector('[class*="horizontal-nav-bar"]');
       const horizontalVisible = horizontalNav?.offsetParent !== null;
       const originalVisible = originalParent?.offsetParent !== null;
 

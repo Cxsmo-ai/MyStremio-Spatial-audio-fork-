@@ -8,6 +8,92 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 $ReleaseDir = Join-Path $ProjectRoot "target\$Target\release"
 
+function Get-VsInstallPath {
+    $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path $VsWhere)) {
+        throw "vswhere.exe not found. Install Visual Studio Build Tools with the C++ workload."
+    }
+    $VsPath = & $VsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if (-not $VsPath) {
+        throw "MSVC toolchain not found. Install Visual Studio Build Tools with the C++ workload."
+    }
+    return $VsPath
+}
+
+function Get-LatestMsvcBinPath {
+    $VsPath = Get-VsInstallPath
+    $ToolsRoot = Join-Path $VsPath "VC\Tools\MSVC"
+    if (-not (Test-Path $ToolsRoot)) {
+        throw "MSVC tools folder not found: $ToolsRoot"
+    }
+    $Latest = Get-ChildItem -Path $ToolsRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+    if (-not $Latest) {
+        throw "No MSVC toolset versions found in: $ToolsRoot"
+    }
+    $Bin = Join-Path $Latest.FullName "bin\HostX64\x64"
+    if (-not (Test-Path $Bin)) {
+        throw "MSVC binary path not found: $Bin"
+    }
+    return $Bin
+}
+
+function Ensure-MpvImportLib {
+    param([string]$Arch)
+
+    if ($Arch -ne "x86_64-pc-windows-msvc") { return }
+
+    $ImportDir = Join-Path $ProjectRoot "mpv-x64"
+    $ImportLib = Join-Path $ImportDir "mpv.lib"
+    if (Test-Path $ImportLib) { return }
+
+    $DllCandidates = @(
+        (Join-Path $ProjectRoot "libmpv-2.dll"),
+        (Join-Path $env:LOCALAPPDATA "Programs\Stremio\libmpv-2.dll")
+    )
+    $MpvDll = $DllCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $MpvDll) {
+        throw "libmpv-2.dll not found. Install Stremio Desktop or place libmpv-2.dll in project root."
+    }
+
+    New-Item -ItemType Directory -Path $ImportDir -Force | Out-Null
+    Copy-Item -Path $MpvDll -Destination (Join-Path $ImportDir "libmpv-2.dll") -Force
+
+    $MsvcBin = Get-LatestMsvcBinPath
+    $DumpBin = Join-Path $MsvcBin "dumpbin.exe"
+    $LibExe = Join-Path $MsvcBin "lib.exe"
+    if (-not (Test-Path $DumpBin) -or -not (Test-Path $LibExe)) {
+        throw "MSVC tools dumpbin.exe/lib.exe not found in: $MsvcBin"
+    }
+
+    $DumpOut = & $DumpBin /EXPORTS $MpvDll
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not read exports from $MpvDll"
+    }
+
+    $Exports = New-Object System.Collections.Generic.List[string]
+    foreach ($line in $DumpOut) {
+        if ($line -match '^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(\S+)$') {
+            $name = $matches[1].Trim()
+            if ($name -and -not $name.StartsWith("[")) {
+                $Exports.Add($name)
+            }
+        }
+    }
+    if ($Exports.Count -eq 0) {
+        throw "No exports found in $MpvDll (cannot generate mpv.lib)."
+    }
+
+    $DefFile = Join-Path $ImportDir "mpv.def"
+    $DefLines = @("LIBRARY libmpv-2.dll", "EXPORTS")
+    $DefLines += $Exports | Sort-Object -Unique | ForEach-Object { "    $_" }
+    Set-Content -Path $DefFile -Value $DefLines -Encoding ASCII
+
+    & $LibExe "/def:$DefFile" "/machine:x64" "/name:libmpv-2.dll" "/out:$ImportLib" | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ImportLib)) {
+        throw "Failed to generate import library: $ImportLib"
+    }
+}
+
 function Ensure-Cargo {
     if (Get-Command cargo -ErrorAction SilentlyContinue) {
         return
@@ -21,20 +107,12 @@ function Ensure-Cargo {
 }
 
 function Get-VcVarsBat {
-    $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
-    if (-not (Test-Path $VsWhere)) {
-        throw "vswhere.exe not found. Install Visual Studio Build Tools with the C++ workload."
-    }
-
-    $VsPath = & $VsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-    if (-not $VsPath) {
-        throw "MSVC toolchain not found. Install Visual Studio Build Tools with the C++ workload."
-    }
-
+    $VsPath = Get-VsInstallPath
     return (Join-Path $VsPath "VC\Auxiliary\Build\vcvars64.bat")
 }
 
 Ensure-Cargo
+Ensure-MpvImportLib -Arch $Target
 $VcVars = Get-VcVarsBat
 $TargetDir = Join-Path $ProjectRoot "target"
 
@@ -48,6 +126,9 @@ $BuildCmd = @(
 
 Write-Host "Building mystremio-shell ($Target)..."
 cmd /c $BuildCmd
+if ($LASTEXITCODE -ne 0) {
+    throw "cargo build failed with exit code $LASTEXITCODE"
+}
 
 & (Join-Path $ProjectRoot "scripts\prepare-runtime.ps1") -OutputDir $ReleaseDir
 

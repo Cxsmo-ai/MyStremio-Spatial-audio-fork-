@@ -322,7 +322,17 @@ fn default_preferences() -> Value {
         "enabledPlugins": [],
         "currentTheme": "liquid-glass.theme.css",
         "autoskip": default_autoskip_preferences(),
-        "metadataAddon": ""
+        "metadataAddon": "",
+        "language": {
+            "favAudio": [],
+            "activeAudio": "",
+            "favSubs": [],
+            "activeSubs": ""
+        },
+        "onboarding": {
+            "tmdbNoticeShown": false,
+            "defaultsApplied": false
+        }
     })
 }
 
@@ -363,12 +373,48 @@ fn normalize_preferences(value: Value) -> Value {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    let language = value
+        .get("language")
+        .and_then(|v| v.as_object())
+        .map(|lang| {
+            json!({
+                "favAudio": lang.get("favAudio").and_then(|v| v.as_array()).cloned().unwrap_or_default(),
+                "activeAudio": lang.get("activeAudio").and_then(|v| v.as_str()).unwrap_or(""),
+                "favSubs": lang.get("favSubs").and_then(|v| v.as_array()).cloned().unwrap_or_default(),
+                "activeSubs": lang.get("activeSubs").and_then(|v| v.as_str()).unwrap_or("")
+            })
+        })
+        .unwrap_or_else(|| {
+            json!({
+                "favAudio": [],
+                "activeAudio": "",
+                "favSubs": [],
+                "activeSubs": ""
+            })
+        });
+    let onboarding = value
+        .get("onboarding")
+        .and_then(|v| v.as_object())
+        .map(|state| {
+            json!({
+                "tmdbNoticeShown": state.get("tmdbNoticeShown").and_then(|v| v.as_bool()).unwrap_or(false),
+                "defaultsApplied": state.get("defaultsApplied").and_then(|v| v.as_bool()).unwrap_or(false)
+            })
+        })
+        .unwrap_or_else(|| {
+            json!({
+                "tmdbNoticeShown": false,
+                "defaultsApplied": false
+            })
+        });
 
     json!({
         "enabledPlugins": enabled,
         "currentTheme": current_theme,
         "autoskip": autoskip,
-        "metadataAddon": metadata_addon
+        "metadataAddon": metadata_addon,
+        "language": language,
+        "onboarding": onboarding
     })
 }
 

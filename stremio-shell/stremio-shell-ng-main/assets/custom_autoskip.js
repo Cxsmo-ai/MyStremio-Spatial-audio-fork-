@@ -7,9 +7,24 @@
   const AUTOSKIP_STYLE_ID = 'stremio-custom-autoskip-style';
 
   const AUTOSKIP_ITEMS = [
-    { id: 'intro', label: 'Intros', storageKey: 'stremio-custom-autoskip-intro' },
-    { id: 'credits', label: 'Credits', storageKey: 'stremio-custom-autoskip-credits' },
-    { id: 'recap', label: 'Recaps', storageKey: 'stremio-custom-autoskip-recap' },
+    {
+      id: 'intro',
+      label: 'Intros',
+      description: 'Skip episode intros automatically when available.',
+      storageKey: 'stremio-custom-autoskip-intro',
+    },
+    {
+      id: 'credits',
+      label: 'Credits',
+      description: 'Skip end credits and continue faster.',
+      storageKey: 'stremio-custom-autoskip-credits',
+    },
+    {
+      id: 'recap',
+      label: 'Recaps',
+      description: 'Skip recap segments before an episode starts.',
+      storageKey: 'stremio-custom-autoskip-recap',
+    },
   ];
 
   function getDeps() {
@@ -174,12 +189,17 @@
         position: fixed;
         z-index: 100000;
         display: block;
-        padding: 0.35rem 0;
+        padding: 0.2rem 0;
         background: var(--modal-background-color, rgba(30, 30, 30, 0.92));
         border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: var(--border-radius, 12px);
-        box-shadow: var(--outer-glow);
-        max-height: 16rem;
+        box-shadow:
+          0 8px 32px rgba(0, 0, 0, 0.5),
+          0 4px 16px rgba(0, 0, 0, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        backdrop-filter: var(--backdrop-filter, blur(20px) saturate(180%));
+        -webkit-backdrop-filter: var(--backdrop-filter, blur(20px) saturate(180%));
+        max-height: 21rem;
         overflow-y: auto;
       }
 
@@ -187,17 +207,45 @@
         display: none !important;
       }
 
-      .stremio-custom-autoskip-row {
+      .stremio-custom-autoskip-entry {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: 1rem;
-        padding: 0.65rem 1rem;
+        gap: 0.85rem;
+        padding: 0.5rem 0.9rem;
       }
 
-      .stremio-custom-autoskip-label {
-        font-size: 0.92em;
+      .stremio-custom-autoskip-entry + .stremio-custom-autoskip-entry {
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .stremio-custom-autoskip-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 0.16rem;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .stremio-custom-autoskip-title {
         color: var(--primary-foreground-color);
+        font-size: 1rem;
+        line-height: 1.35;
+      }
+
+      .stremio-custom-autoskip-entry .stremio-custom-autoskip-hint {
+        opacity: 0.65;
+        font-size: 0.85em;
+        margin-top: 0.15em;
+        line-height: 1.35;
+        color: var(--primary-foreground-color);
+      }
+
+      .stremio-custom-autoskip-entry [class*="toggle-container"] {
+        flex-shrink: 0;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
       }
     `;
     document.head.appendChild(style);
@@ -321,11 +369,22 @@
 
     for (const item of AUTOSKIP_ITEMS) {
       const row = document.createElement('div');
-      row.className = 'stremio-custom-autoskip-row';
+      row.className = 'stremio-custom-autoskip-entry';
 
-      const label = document.createElement('span');
-      label.className = 'stremio-custom-autoskip-label';
-      label.textContent = item.label;
+      const copy = document.createElement('div');
+      copy.className = 'stremio-custom-autoskip-copy';
+
+      const title = document.createElement('div');
+      title.className = 'stremio-custom-autoskip-title';
+      title.textContent = item.label;
+      copy.appendChild(title);
+
+      if (item.description) {
+        const hint = document.createElement('div');
+        hint.className = 'stremio-custom-autoskip-hint';
+        hint.textContent = item.description;
+        copy.appendChild(hint);
+      }
 
       const enabled = readAutoskipEnabled(item.id, item.storageKey);
       const toggle = createToggle(enabled, classes);
@@ -345,7 +404,7 @@
         updateAutoskipSummary(dropdown);
       });
 
-      row.append(label, toggle);
+      row.append(copy, toggle);
       panel.appendChild(row);
     }
 

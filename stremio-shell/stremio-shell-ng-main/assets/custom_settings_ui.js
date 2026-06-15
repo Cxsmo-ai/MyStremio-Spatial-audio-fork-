@@ -371,15 +371,41 @@ function ensureSettingsStyles() {
 
     .stremio-custom-settings-block .stremio-custom-autoskip-row {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 1rem;
-      padding: 0.65rem 1rem;
+      gap: 0.9rem;
+      padding: 0.62rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .stremio-custom-settings-block .stremio-custom-autoskip-row:last-child {
+      border-bottom: 0;
+    }
+
+    .stremio-custom-settings-block .stremio-custom-autoskip-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 0.16rem;
+      min-width: 0;
+      flex: 1;
     }
 
     .stremio-custom-settings-block .stremio-custom-autoskip-label {
-      font-size: 0.92em;
+      font-size: 0.96em;
+      line-height: 1.35;
       color: var(--primary-foreground-color);
+    }
+
+    .stremio-custom-settings-block .stremio-custom-autoskip-hint {
+      font-size: 0.82em;
+      line-height: 1.35;
+      color: var(--primary-foreground-color);
+      opacity: 0.62;
+    }
+
+    .stremio-custom-settings-block .stremio-custom-autoskip-row [class*="toggle-container"] {
+      flex-shrink: 0;
+      margin-top: 0.08rem;
     }
 
     .stremio-custom-settings-block .stremio-custom-native-caret {
@@ -869,7 +895,7 @@ function ensureSettingsStyles() {
     .stremio-custom-settings-block .stremio-custom-setting-select {
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.14);
-      border-radius: 4px;
+      border-radius: 6px;
       color: var(--primary-foreground-color);
       padding: 0.35rem 0.55rem;
       min-width: 10rem;
@@ -880,6 +906,19 @@ function ensureSettingsStyles() {
     .stremio-custom-settings-block .stremio-custom-setting-select:focus {
       outline: 1px solid var(--primary-accent-color, #7f5af0);
       border-color: var(--primary-accent-color, #7f5af0);
+    }
+
+    .stremio-custom-settings-block .stremio-custom-setting-select {
+      appearance: auto;
+      -webkit-appearance: menulist;
+      color-scheme: dark;
+      background-color: rgba(56, 56, 56, 0.95);
+      color: #f4f4f4;
+    }
+
+    .stremio-custom-settings-block .stremio-custom-setting-select option {
+      background-color: #2d2d2d;
+      color: #f4f4f4;
     }
   `;
   document.head.appendChild(style);

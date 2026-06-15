@@ -582,6 +582,7 @@ function createFavoritePicker(content, options, storageKey, allowNone, onChange)
         }
         selected = sanitizeFavorites(selected, allowNone);
         writeJsonList(storageKey, selected, allowNone);
+        window.StremioCustom?.helpers?.persistUserPreferences?.();
         buttonLabel.textContent = formatSelectionLabel(selected, options);
         onChange(selected);
         renderDropdown();
@@ -731,6 +732,7 @@ function createQuickSelectRow(content, favorites, activeKey, options, settingKey
       btn.addEventListener('click', () => {
         localStorage.setItem(activeKey, code);
         setDefaultLanguageViaCore(settingKey, code);
+        window.StremioCustom?.helpers?.persistUserPreferences?.();
         if (settingKey === 'subtitlesLanguage') {
           window.__stremioCustomSubtitleSyncNow?.();
         }

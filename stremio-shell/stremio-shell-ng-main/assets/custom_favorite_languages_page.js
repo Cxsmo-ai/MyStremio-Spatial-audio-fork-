@@ -345,6 +345,7 @@ function buildFavoriteLanguagesPageScript() {
           }
           selected = sanitizeFavorites(selected, allowNone);
           writeJsonList(storageKey, selected, allowNone);
+          window.StremioCustom?.helpers?.persistUserPreferences?.();
           buttonLabel.textContent = formatSelectionLabel(selected, options);
           renderDropdown();
         });
@@ -442,6 +443,7 @@ function buildFavoriteLanguagesPageScript() {
         btn.addEventListener('click', () => {
           localStorage.setItem(activeKey, code);
           setDefaultLanguage(settingKey, code);
+          window.StremioCustom?.helpers?.persistUserPreferences?.();
           if (settingKey === 'subtitlesLanguage') {
             window.__stremioCustomSubtitleSyncNow?.();
           }

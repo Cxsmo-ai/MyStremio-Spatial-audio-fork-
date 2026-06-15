@@ -11,20 +11,20 @@ $ErrorActionPreference = "Stop"
 if (-not $SourceRoot) {
     $MystremioRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\..\mystremio"))
     $LegacyRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\..\stremio-custom"))
-    if (Test-Path $MystremioRoot) {
+    if ((Test-Path (Join-Path $MystremioRoot "plugins")) -or (Test-Path (Join-Path $MystremioRoot "themes"))) {
         $SourceRoot = $MystremioRoot
-    } elseif (Test-Path $LegacyRoot) {
+    } elseif ((Test-Path (Join-Path $LegacyRoot "plugins")) -or (Test-Path (Join-Path $LegacyRoot "themes"))) {
         $SourceRoot = $LegacyRoot
     } else {
-        throw "Plugin/theme source not found. Expected mystremio/ or stremio-custom/ at repository root."
+        $SourceRoot = ""
     }
 }
 
-$SourceRoot = [System.IO.Path]::GetFullPath($SourceRoot)
+$SourceRoot = if ($SourceRoot) { [System.IO.Path]::GetFullPath($SourceRoot) } else { "" }
 $ReleaseDir = [System.IO.Path]::GetFullPath($ReleaseDir)
 
-$PluginSource = Join-Path $SourceRoot "plugins"
-$ThemeSource = Join-Path $SourceRoot "themes"
+$PluginSource = if ($SourceRoot) { Join-Path $SourceRoot "plugins" } else { "" }
+$ThemeSource = if ($SourceRoot) { Join-Path $SourceRoot "themes" } else { "" }
 $PluginTargets = @(
     (Join-Path $ReleaseDir "plugins"),
     (Join-Path $env:APPDATA "MyStremio\plugins")
@@ -34,6 +34,29 @@ $ThemeTargets = @(
     (Join-Path $env:APPDATA "MyStremio\themes")
 )
 
+function Resolve-FallbackSource {
+    param(
+        [string]$Kind,
+        [string]$ReleaseDir
+    )
+    $candidates = @(
+        (Join-Path $env:APPDATA "MyStremio\$Kind"),
+        (Join-Path (Join-Path $PSScriptRoot "..") $Kind),
+        (Join-Path $ReleaseDir $Kind),
+        (Join-Path $env:USERPROFILE "Downloads\StremioCustom-v2.0.0-win64\$Kind"),
+        (Join-Path $env:USERPROFILE "Downloads\MyStremio-v2.1.0-win64\$Kind")
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            $hasFiles = (Get-ChildItem -Path $candidate -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+            if ($hasFiles) {
+                return [System.IO.Path]::GetFullPath($candidate)
+            }
+        }
+    }
+    return $null
+}
+
 function Copy-TreeIfExists {
     param(
         [string]$Source,
@@ -42,6 +65,13 @@ function Copy-TreeIfExists {
 
     if (-not (Test-Path $Source)) {
         Write-Warning "Missing source: $Source"
+        return
+    }
+
+    $srcFull = [System.IO.Path]::GetFullPath($Source)
+    $dstFull = [System.IO.Path]::GetFullPath($Destination)
+    if ($srcFull -eq $dstFull) {
+        Write-Warning "Skipping sync because source equals destination: $srcFull"
         return
     }
 
@@ -83,11 +113,49 @@ function Sanitize-PluginConfigs {
     }
 }
 
-if (-not (Test-Path $PluginSource)) {
-    throw "Plugin source not found: $PluginSource"
+function Patch-ContextMenuFixPlugin {
+    param([string]$PluginsDir)
+
+    if (-not (Test-Path $PluginsDir)) { return }
+    $pluginPath = Join-Path $PluginsDir "interface\context-menu-fix.plugin.js"
+    if (-not (Test-Path $pluginPath)) { return }
+
+    try {
+        $raw = Get-Content $pluginPath -Raw -Encoding UTF8
+        if (-not $raw) { return }
+
+        $needle = "if (isNavMenu) {"
+        $guard = "return; // Keep profile menu native/clickable"
+        if ($raw -like "*$needle*" -and $raw -notlike "*$guard*") {
+            $replacement = "if (isNavMenu) {`r`n            $guard`r`n        }`r`n`r`n        if (false && isNavMenu) {"
+            $patched = $raw.Replace($needle, $replacement)
+            if ($patched -ne $raw) {
+                Set-Content -Path $pluginPath -Value $patched -Encoding UTF8
+                Write-Host "Patched context-menu-fix plugin to skip profile menu cloning."
+            }
+        }
+    } catch {
+        Write-Warning "Could not patch context-menu-fix plugin: $_"
+    }
 }
-if (-not (Test-Path $ThemeSource)) {
-    throw "Theme source not found: $ThemeSource"
+
+if (-not $PluginSource -or -not (Test-Path $PluginSource)) {
+    $fallback = Resolve-FallbackSource -Kind "plugins" -ReleaseDir $ReleaseDir
+    if ($fallback) {
+        Write-Warning "Plugin source not found at '$PluginSource'. Using fallback '$fallback'."
+        $PluginSource = $fallback
+    } else {
+        throw "Plugin source not found: $PluginSource"
+    }
+}
+if (-not $ThemeSource -or -not (Test-Path $ThemeSource)) {
+    $fallback = Resolve-FallbackSource -Kind "themes" -ReleaseDir $ReleaseDir
+    if ($fallback) {
+        Write-Warning "Theme source not found at '$ThemeSource'. Using fallback '$fallback'."
+        $ThemeSource = $fallback
+    } else {
+        throw "Theme source not found: $ThemeSource"
+    }
 }
 
 foreach ($target in $PluginTargets) {
@@ -95,6 +163,7 @@ foreach ($target in $PluginTargets) {
     Copy-TreeIfExists -Source $PluginSource -Destination $target
     if ($target -eq (Join-Path $ReleaseDir "plugins")) {
         Sanitize-PluginConfigs -PluginsDir $target
+        Patch-ContextMenuFixPlugin -PluginsDir $target
     }
 }
 

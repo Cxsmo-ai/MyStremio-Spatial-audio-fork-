@@ -5,6 +5,8 @@
   window.__stremioCustomPlayerLoading = true;
 
   const STYLE_ID = 'stremio-custom-player-loading-style';
+  const APP_LOADING_STYLE_ID = 'stremio-custom-app-loading-style';
+  const APP_LOADING_MASK_ID = 'stremio-custom-app-loading-mask';
 
   function isPlayerRoute() {
     return /#\/player/.test(location.hash || '');
@@ -54,6 +56,55 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
+  function injectAppLoadingStyles() {
+    if (document.getElementById(APP_LOADING_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = APP_LOADING_STYLE_ID;
+    style.textContent = `
+      #${APP_LOADING_MASK_ID} {
+        position: fixed;
+        inset: 0;
+        z-index: 119;
+        background: rgb(20, 20, 20);
+        opacity: 0;
+        display: none;
+        pointer-events: none;
+        transition: opacity 120ms ease;
+      }
+      #${APP_LOADING_MASK_ID}.visible {
+        display: block;
+        opacity: 1;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function ensureAppLoadingMask() {
+    injectAppLoadingStyles();
+    let mask = document.getElementById(APP_LOADING_MASK_ID);
+    if (!mask) {
+      mask = document.createElement('div');
+      mask.id = APP_LOADING_MASK_ID;
+      document.body.appendChild(mask);
+    }
+    return mask;
+  }
+
+  let appMaskTimer = null;
+  function showAppLoadingMask(ms = 220) {
+    return;
+    const mask = ensureAppLoadingMask();
+    if (!mask) return;
+    mask.classList.add('visible');
+    if (appMaskTimer) clearTimeout(appMaskTimer);
+    appMaskTimer = setTimeout(() => {
+      mask.classList.remove('visible');
+      setTimeout(() => {
+        if (!mask.classList.contains('visible')) mask.style.display = 'none';
+      }, 140);
+    }, ms);
+  }
+
   function isBufferingVisible(layer) {
     if (!layer) return false;
     const style = window.getComputedStyle(layer);
@@ -93,6 +144,7 @@
   window.__stremioCustomPlayerLoadingEnsure = syncPlayerLoadingState;
 
   window.addEventListener('hashchange', () => {
+    showAppLoadingMask(isPlayerRoute() ? 340 : 190);
     if (isPlayerRoute()) startWatcher();
     else stopWatcher();
     syncPlayerLoadingState();
@@ -102,6 +154,7 @@
 
   if (isPlayerRoute()) startWatcher();
   else injectStyles();
+  showAppLoadingMask(450);
 
   console.info('[StremioCustom] Player loading backdrop ready.');
 })();

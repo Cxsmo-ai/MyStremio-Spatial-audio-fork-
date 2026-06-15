@@ -6,6 +6,7 @@
 
   const STORAGE_KEY = 'stremio-custom-library-folders';
   const ACTIVE_FOLDER_KEY = 'stremio-custom-library-active-folder';
+  const LAST_SELECTED_ITEM_KEY = 'stremio-custom-library-last-selected-item';
   const STYLE_ID = 'stremio-custom-library-folders-style';
   const ROW_ID = 'stremio-custom-library-folders-row';
   const PLUS_ID = 'stremio-custom-library-folder-plus';
@@ -117,6 +118,16 @@
       if (id) sessionStorage.setItem(ACTIVE_FOLDER_KEY, id);
       else sessionStorage.removeItem(ACTIVE_FOLDER_KEY);
     } catch (_) {}
+  }
+
+  function clearStickySelection() {
+    try {
+      sessionStorage.removeItem(LAST_SELECTED_ITEM_KEY);
+    } catch (_) {}
+    const selected = document.querySelectorAll(
+      '[class*="meta-item-container"][class*="selected"], [class*="meta-item"][class*="selected"]'
+    );
+    selected.forEach((node) => node.classList.remove('selected'));
   }
 
   function getActiveFolder() {
@@ -719,6 +730,18 @@
     if (group) group.style.display = 'none';
   }
 
+  function clearLibraryRouteState() {
+    writeActiveFolderId(null);
+    clearStickySelection();
+    closeMenu();
+    document.body.classList.remove('sc-custom-library-folder-active');
+    const group = document.getElementById(ROW_ID);
+    if (group) group.remove();
+    document
+      .querySelectorAll('[data-sc-custom-folder-tab], #' + PLUS_ID)
+      .forEach((node) => node.remove());
+  }
+
   function bindRailPositioning() {
     if (railPositionBound) return;
     railPositionBound = true;
@@ -927,6 +950,7 @@
 
   function selectFolder(folderId) {
     writeActiveFolderId(folderId);
+    clearStickySelection();
     syncTabVisualState();
     applyFolderFilter();
   }
@@ -1034,6 +1058,7 @@
         () => {
           if (!activeFolderId) return;
           writeActiveFolderId(null);
+          clearStickySelection();
           clearCustomTabSelection();
           document.body.classList.remove('sc-custom-library-folder-active');
           scheduleFilter();
@@ -1174,9 +1199,7 @@
       injectTimer = null;
       if (Date.now() < suppressInjectUntil) return;
       if (!isLibraryPage()) {
-        closeMenu();
-        hideCustomRail();
-        document.body.classList.remove('sc-custom-library-folder-active');
+        clearLibraryRouteState();
         gridLayoutLocked = false;
         return;
       }
@@ -1195,6 +1218,11 @@
   window.__stremioCustomLibraryFoldersEnsure = scheduleInject;
 
   window.addEventListener('hashchange', scheduleInject);
+  window.addEventListener('hashchange', () => {
+    if (!isLibraryPage()) {
+      clearLibraryRouteState();
+    }
+  });
   window.addEventListener('popstate', scheduleInject);
   document.addEventListener('stremio-custom-bootstrap-ready', scheduleInject);
 

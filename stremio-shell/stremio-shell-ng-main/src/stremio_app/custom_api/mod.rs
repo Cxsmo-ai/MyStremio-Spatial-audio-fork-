@@ -3,7 +3,7 @@ mod registry;
 mod storage;
 
 use crate::stremio_app::discord_presence;
-use paths::{app_data_dir, bundled_plugins_dir, bundled_themes_dir, ensure_asset_dirs, plugins_dir, themes_dir};
+use paths::{bundled_plugins_dir, bundled_themes_dir, ensure_asset_dirs, plugins_dir, themes_dir};
 use serde_json::{json, Value};
 use std::sync::{Mutex, OnceLock};
 use storage::{
@@ -195,16 +195,3 @@ pub fn is_custom_request(raw: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub fn settings_saved_event(plugin_base_name: &str, config: &Value) -> String {
-    json!({
-        "stremioCustom": true,
-        "event": "on-settings-saved",
-        "pluginBaseName": plugin_base_name,
-        "payload": config,
-    })
-    .to_string()
-}
-
-pub fn app_data_root() -> std::path::PathBuf {
-    app_data_dir()
-}

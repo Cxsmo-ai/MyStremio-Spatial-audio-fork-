@@ -2,10 +2,6 @@
 
 **MyStremio** is a customized Windows desktop client based on the Stremio shell. It bundles enhanced playback, interface tweaks, library collections, Discord Rich Presence, and many plugins — all in one installer.
 
-Known Bugs: Custom Library Items show on Board after clicking them once. 
-
-PS CTRL+R might fix your problem.
-
 > **Disclaimer:** MyStremio is an independent community project. It is not affiliated with or endorsed by Stremio AG.
 
 ---
@@ -15,7 +11,7 @@ PS CTRL+R might fix your problem.
 You only need **one file** — just like the official Stremio installer.
 
 1. Open the [GitHub Releases](https://github.com/YOUR_USERNAME/MyStremio/releases) page.
-2. Download **`MyStremioSetup-v2.1.0_x64.exe`** (or the latest version).
+2. Download **`MyStremioSetup-v2.1.2_x64.exe`** (or the latest version).
 3. Run the installer. It installs everything automatically:
    - Application binaries (`mystremio-shell.exe`, streaming server, FFmpeg, libmpv)
    - Bundled plugins and themes
@@ -50,10 +46,7 @@ Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. 
 
 | Feature | Description |
 |---------|-------------|
-| **Subtitle sync** | Adjust subtitle delay per session; embedded subtitles supported |
-| **Audio sync** | Fine-tune audio delay for out-of-sync streams |
 | **Autoskip** | Skip intros, outros, and credits (AniSkip + TheIntroDB integration) |
-| **Picture-in-Picture** | PiP button in the video player |
 | **Seek buffer** | Improved seeking and buffer handling |
 | **Stream cache** | Caches stream metadata for faster re-selection |
 | **Player glass UI** | Frosted-glass styling on the player overlay |
@@ -76,7 +69,6 @@ Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. 
 | **Add to collection** | Right-click or **Shift+click** library items to add/remove from active collection |
 | **Liquid Glass navigation** | Horizontal top navigation integrated with the Liquid Glass theme |
 | **Scroll restore** | Remembers scroll position when navigating back |
-| **Deep links** | Improved handling of `stremio://` and external links |
 | **Slash to search** | Press `/` to focus the search bar from the main menu |
 
 ### Interface & themes
@@ -100,7 +92,6 @@ Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. 
 | **Data enrichment** | TMDB-powered cast, similar titles, collections, ratings (requires TMDB API key) |
 | **Meta hover panel** | Rich info panel when hovering posters |
 | **Card hover info** | IMDB rating and release date on card hover |
-| **Playback preview** | Trailer preview on poster hover (Netflix-style) |
 | **Trending anime** | Top airing anime row from MyAnimeList |
 
 ### Integrations & utilities
@@ -140,7 +131,7 @@ cd stremio-shell\stremio-shell-ng-main
 .\package-release.ps1
 ```
 
-Output: `release\MyStremioSetup-v2.1.0_x64.exe`
+Output: `release\MyStremioSetup-v2.1.2_x64.exe`
 
 To assemble a clean GitHub folder from the parent repository:
 
@@ -166,6 +157,15 @@ Stremio® is a trademark of Smart Code OOD. This project is a community modifica
 
 ---
 
-## Version
+## Patch Notes
 
-**2.1.0** — Rebranded to MyStremio, single-installer release, library collection click fix.
+### 2.1.2
+
+- Reduced background maintenance frequency to lower idle CPU and RAM usage.
+- Fixed custom library selection persistence so clicked items no longer stay pinned across Board/Player transitions.
+- Improved start-to-player transition: avoids white flash and keeps dark/poster-first loading visuals.
+- Quick Select language state (favorite and active audio/subtitle choices) now persists across app sessions.
+- Enabled these plugins by default on first launch: Context Menu Fix, Enhanced Covers, Enhanced Titlebar, Dynamic Hero, Data Enrichment, Meta Hover.
+- Added first-run top-right notice (English) prompting users to add a TMDB API key for Data Enrichment.
+- Added short global transition loading mask to hide brief unstyled/plugin-loading UI during app start and page switches.
+- Updated release metadata and app version to `2.1.2`.
