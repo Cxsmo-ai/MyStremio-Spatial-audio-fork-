@@ -136,6 +136,8 @@
       autoskip: getAutoskipPreferences(),
       metadataAddon: getMetadataAddon(),
       language: getLanguagePreferences(),
+      preload: getPreloadPreference(),
+      discordPresence: getDiscordPresencePreferences(),
       onboarding: {
         tmdbNoticeShown: localStorage.getItem(TMDB_NOTICE_KEY) === 'true',
         defaultsApplied: localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true',
@@ -152,6 +154,12 @@
   const LIQUID_GLASS_THEME = 'liquid-glass.theme.css';
   const HORIZONTAL_NAV_PLUGIN = 'interface/horizontal-navigation.plugin.js';
   const METADATA_ADDON_KEY = 'stremio-custom-metadata-addon';
+  const PRELOAD_SECS_KEY = 'stremio-custom-preload-secs';
+  const DISCORD_KEYS = {
+    enabled: 'stremio-custom-discord-rp-enabled',
+    showPaused: 'stremio-custom-discord-rp-show-paused',
+    showMenu: 'stremio-custom-discord-rp-show-menu',
+  };
   const LANGUAGE_KEYS = {
     favAudio: 'stremio-custom-fav-audio',
     activeAudio: 'stremio-custom-active-audio',
@@ -289,6 +297,44 @@
     if (typeof prefs.activeSubs === 'string') {
       if (prefs.activeSubs) localStorage.setItem(LANGUAGE_KEYS.activeSubs, prefs.activeSubs);
       else localStorage.removeItem(LANGUAGE_KEYS.activeSubs);
+    }
+  }
+
+  function getPreloadPreference() {
+    const value = localStorage.getItem(PRELOAD_SECS_KEY);
+    return value ? String(value) : '120';
+  }
+
+  function applyPreloadPreference(value) {
+    if (value == null) return;
+    const normalized = String(value).trim();
+    if (!normalized) return;
+    localStorage.setItem(PRELOAD_SECS_KEY, normalized);
+  }
+
+  function getDiscordPresencePreferences() {
+    const readBool = (key, fallback) => {
+      const raw = localStorage.getItem(key);
+      if (raw == null) return fallback;
+      return raw === 'true';
+    };
+    return {
+      enabled: readBool(DISCORD_KEYS.enabled, false),
+      showPaused: readBool(DISCORD_KEYS.showPaused, true),
+      showMenu: readBool(DISCORD_KEYS.showMenu, true),
+    };
+  }
+
+  function applyDiscordPresencePreferences(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (typeof prefs.enabled === 'boolean') {
+      localStorage.setItem(DISCORD_KEYS.enabled, prefs.enabled ? 'true' : 'false');
+    }
+    if (typeof prefs.showPaused === 'boolean') {
+      localStorage.setItem(DISCORD_KEYS.showPaused, prefs.showPaused ? 'true' : 'false');
+    }
+    if (typeof prefs.showMenu === 'boolean') {
+      localStorage.setItem(DISCORD_KEYS.showMenu, prefs.showMenu ? 'true' : 'false');
     }
   }
 
@@ -435,7 +481,13 @@
       const diskMetadataAddon =
         typeof preferences?.metadataAddon === 'string' ? preferences.metadataAddon : '';
       const diskLanguage = preferences?.language;
+      const diskPreload = preferences?.preload;
+      const diskDiscordPresence = preferences?.discordPresence;
       const diskOnboarding = preferences?.onboarding;
+      const hasLocalDiscordPrefs =
+        localStorage.getItem(DISCORD_KEYS.enabled) != null ||
+        localStorage.getItem(DISCORD_KEYS.showPaused) != null ||
+        localStorage.getItem(DISCORD_KEYS.showMenu) != null;
       const localPlugins = getEnabledPlugins();
       const localTheme = getCurrentTheme();
       const hasDiskState = diskPlugins.length > 0 || diskTheme.length > 0;
@@ -455,6 +507,12 @@
       if (diskLanguage && typeof diskLanguage === 'object') {
         applyLanguagePreferences(diskLanguage);
       }
+      if (diskPreload !== undefined && diskPreload !== null) {
+        applyPreloadPreference(diskPreload);
+      }
+      if (!hasLocalDiscordPrefs && diskDiscordPresence && typeof diskDiscordPresence === 'object') {
+        applyDiscordPresencePreferences(diskDiscordPresence);
+      }
       if (diskOnboarding && typeof diskOnboarding === 'object') {
         if (diskOnboarding.tmdbNoticeShown === true) localStorage.setItem(TMDB_NOTICE_KEY, 'true');
         if (diskOnboarding.defaultsApplied === true) localStorage.setItem(DEFAULTS_APPLIED_KEY, 'true');
@@ -468,6 +526,8 @@
         autoskip: getAutoskipPreferences(),
         metadataAddon: getMetadataAddon(),
         language: getLanguagePreferences(),
+        preload: getPreloadPreference(),
+        discordPresence: getDiscordPresencePreferences(),
         onboarding: {
           tmdbNoticeShown: localStorage.getItem(TMDB_NOTICE_KEY) === 'true',
           defaultsApplied: localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true',

@@ -323,6 +323,12 @@ fn default_preferences() -> Value {
         "currentTheme": "liquid-glass.theme.css",
         "autoskip": default_autoskip_preferences(),
         "metadataAddon": "",
+        "preload": "120",
+        "discordPresence": {
+            "enabled": false,
+            "showPaused": true,
+            "showMenu": true
+        },
         "language": {
             "favAudio": [],
             "activeAudio": "",
@@ -373,6 +379,29 @@ fn normalize_preferences(value: Value) -> Value {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    let preload = value
+        .get("preload")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "120".to_string());
+    let discord_presence = value
+        .get("discordPresence")
+        .and_then(|v| v.as_object())
+        .map(|settings| {
+            json!({
+                "enabled": settings.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false),
+                "showPaused": settings.get("showPaused").and_then(|v| v.as_bool()).unwrap_or(true),
+                "showMenu": settings.get("showMenu").and_then(|v| v.as_bool()).unwrap_or(true)
+            })
+        })
+        .unwrap_or_else(|| {
+            json!({
+                "enabled": false,
+                "showPaused": true,
+                "showMenu": true
+            })
+        });
     let language = value
         .get("language")
         .and_then(|v| v.as_object())
@@ -413,6 +442,8 @@ fn normalize_preferences(value: Value) -> Value {
         "currentTheme": current_theme,
         "autoskip": autoskip,
         "metadataAddon": metadata_addon,
+        "preload": preload,
+        "discordPresence": discord_presence,
         "language": language,
         "onboarding": onboarding
     })

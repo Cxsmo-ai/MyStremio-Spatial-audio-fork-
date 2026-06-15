@@ -29,6 +29,7 @@ const {
   queryFirstMatching,
   isPluginEnabled,
   removeLegacyQuickSettingsSection,
+  persistUserPreferences,
 } = window.StremioCustom.helpers;
 const { listPlugins: listPluginsFromApi, resolvePluginRef, loadPlugin, unloadPlugin } = window.StremioCustom.plugins;
 const { applyTheme } = window.StremioCustom.theme;
@@ -97,12 +98,12 @@ function positionNativeDropdownPanel(dropdown) {
   const panel = dropdown.querySelector('.stremio-custom-native-dropdown-panel');
   if (!trigger || !panel) return;
   const rect = trigger.getBoundingClientRect();
-  if (rect.width < 1 || rect.height < 1 || rect.top < 1) {
+  if (rect.width < 1 || rect.height < 1) {
     closeNativeDropdown(dropdown);
     return;
   }
   panel.style.position = 'fixed';
-  panel.style.top = `${rect.bottom + 2}px`;
+  panel.style.top = `${Math.max(rect.bottom + 2, 8)}px`;
   panel.style.left = `${rect.left}px`;
   panel.style.width = `${Math.max(rect.width, 280)}px`;
   panel.style.zIndex = '100000';
@@ -1149,10 +1150,40 @@ function createPluginSettingField(pluginBaseName, field, classes, config) {
   labelText.textContent = field.label || field.key;
   labelWrap.appendChild(labelText);
 
-  if (field.description) {
+  const fieldDescription = String(field.description || '');
+  const lowerDescription = fieldDescription.toLowerCase();
+  const links = [];
+  if (pluginBaseName === 'data-enrichment' && lowerDescription.includes('themoviedb.org')) {
+    links.push({ label: 'Open TMDB API page', url: 'https://www.themoviedb.org/settings/api' });
+  }
+  if (
+    (pluginBaseName === 'tidb' && lowerDescription.includes('theintrodb.org')) ||
+    (pluginBaseName === 'tidb' && field.key === 'tidb_api_key')
+  ) {
+    links.push({ label: 'Open TheIntroDB API page', url: 'https://theintrodb.org' });
+  }
+
+  if (fieldDescription || links.length) {
     const hint = document.createElement('div');
     hint.className = 'stremio-custom-setting-hint';
-    hint.textContent = field.description;
+    hint.textContent = fieldDescription;
+    if (links.length) {
+      if (fieldDescription) hint.appendChild(document.createTextNode(' '));
+      links.forEach((link, index) => {
+        if (index > 0) hint.appendChild(document.createTextNode(' · '));
+        const anchor = document.createElement('a');
+        anchor.href = '#';
+        anchor.textContent = link.label;
+        anchor.style.color = 'var(--primary-accent-color, #7f5af0)';
+        anchor.style.textDecoration = 'underline';
+        anchor.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          api.openExternalUrl(link.url);
+        });
+        hint.appendChild(anchor);
+      });
+    }
     labelWrap.appendChild(hint);
   }
 
@@ -1907,6 +1938,7 @@ function createLocalToggleOption(id, title, description, storageKey, classes, on
     } catch (_) {}
     toggle.classList.toggle('checked', enabled);
     onChange?.(enabled);
+    persistUserPreferences?.();
   });
 
   content.appendChild(toggle);
@@ -2098,6 +2130,7 @@ function createPreloadOption(classes) {
       } catch (_) {}
       window.StremioCustomPlayback?.applyPreloadSettings?.();
       document.dispatchEvent(new CustomEvent('stremio-custom-preload-changed', { detail: entry }));
+      persistUserPreferences?.();
     },
   });
 
@@ -2294,7 +2327,6 @@ function ensurePlayerLanguageSettings(classes) {
 async function checkSettings(pluginApi) {
   if (!isOnSettingsPage()) return;
 
-  closeAllNativeDropdowns();
   removeLegacyQuickSettingsSection();
 
   const classes = getStremioClasses();

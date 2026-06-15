@@ -92,9 +92,9 @@
 
   let appMaskTimer = null;
   function showAppLoadingMask(ms = 220) {
-    return;
     const mask = ensureAppLoadingMask();
     if (!mask) return;
+    mask.style.display = 'block';
     mask.classList.add('visible');
     if (appMaskTimer) clearTimeout(appMaskTimer);
     appMaskTimer = setTimeout(() => {
@@ -103,6 +103,18 @@
         if (!mask.classList.contains('visible')) mask.style.display = 'none';
       }, 140);
     }, ms);
+  }
+
+  function showBootLoadingMaskUntilReady() {
+    if (!document.body) return;
+    showAppLoadingMask(1400);
+    const hideWhenReady = () => {
+      setTimeout(() => {
+        const mask = document.getElementById(APP_LOADING_MASK_ID);
+        if (mask) mask.classList.remove('visible');
+      }, 60);
+    };
+    document.addEventListener('stremio-custom-bootstrap-ready', hideWhenReady, { once: true });
   }
 
   function isBufferingVisible(layer) {
@@ -154,7 +166,7 @@
 
   if (isPlayerRoute()) startWatcher();
   else injectStyles();
-  showAppLoadingMask(450);
+  showBootLoadingMaskUntilReady();
 
   console.info('[StremioCustom] Player loading backdrop ready.');
 })();

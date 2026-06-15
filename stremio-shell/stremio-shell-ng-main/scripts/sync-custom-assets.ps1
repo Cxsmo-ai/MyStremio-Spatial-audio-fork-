@@ -139,6 +139,22 @@ function Patch-ContextMenuFixPlugin {
     }
 }
 
+function Ensure-StreamUiSchema {
+    param([string]$PluginsDir)
+
+    if (-not (Test-Path $PluginsDir)) { return }
+    $schemaSource = Join-Path (Join-Path $PSScriptRoot "..\assets") "stream-ui.plugin.schema.json"
+    if (-not (Test-Path $schemaSource)) { return }
+    $schemaTarget = Join-Path $PluginsDir "stream-ui.plugin.schema.json"
+
+    try {
+        Copy-Item -Path $schemaSource -Destination $schemaTarget -Force
+        Write-Host "Ensured Stream UI schema in $PluginsDir"
+    } catch {
+        Write-Warning ("Could not copy Stream UI schema to " + $PluginsDir + ": " + $_)
+    }
+}
+
 if (-not $PluginSource -or -not (Test-Path $PluginSource)) {
     $fallback = Resolve-FallbackSource -Kind "plugins" -ReleaseDir $ReleaseDir
     if ($fallback) {
@@ -161,6 +177,7 @@ if (-not $ThemeSource -or -not (Test-Path $ThemeSource)) {
 foreach ($target in $PluginTargets) {
     if ($SkipAppData -and $target -like "$env:APPDATA*") { continue }
     Copy-TreeIfExists -Source $PluginSource -Destination $target
+    Ensure-StreamUiSchema -PluginsDir $target
     if ($target -eq (Join-Path $ReleaseDir "plugins")) {
         Sanitize-PluginConfigs -PluginsDir $target
         Patch-ContextMenuFixPlugin -PluginsDir $target
