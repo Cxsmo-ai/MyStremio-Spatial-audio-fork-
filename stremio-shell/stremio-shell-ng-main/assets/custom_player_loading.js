@@ -7,6 +7,7 @@
   const STYLE_ID = 'stremio-custom-player-loading-style';
   const APP_LOADING_STYLE_ID = 'stremio-custom-app-loading-style';
   const APP_LOADING_MASK_ID = 'stremio-custom-app-loading-mask';
+  const TOP_SEAM_FIX_STYLE_ID = 'stremio-custom-top-seam-fix';
 
   function isPlayerRoute() {
     return /#\/player/.test(location.hash || '');
@@ -90,6 +91,23 @@
     return mask;
   }
 
+  function ensureTopSeamFix() {
+    if (document.getElementById(TOP_SEAM_FIX_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = TOP_SEAM_FIX_STYLE_ID;
+    style.textContent = `
+      .hero-container,
+      [class*="hero-container"] {
+        border-top: 0 !important;
+      }
+      .main-nav-bars-container-wNjS5 .nav-content-container-zl9hQ,
+      [class*="main-nav-bars-container"] [class*="nav-content-container"] {
+        border-top: 0 !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
   let appMaskTimer = null;
   function showAppLoadingMask(ms = 220) {
     const mask = ensureAppLoadingMask();
@@ -166,6 +184,7 @@
 
   if (isPlayerRoute()) startWatcher();
   else injectStyles();
+  ensureTopSeamFix();
   showBootLoadingMaskUntilReady();
 
   console.info('[StremioCustom] Player loading backdrop ready.');

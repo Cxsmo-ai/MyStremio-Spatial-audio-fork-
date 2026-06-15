@@ -110,17 +110,8 @@
     saveUserPreferences: (preferences) => invoke('save-user-preferences', preferences),
     getAutoskipSettings: () => invoke('get-autoskip-settings'),
     saveAutoskipSettings: (settings) => invoke('save-autoskip-settings', settings),
-    fetchRegistry: () => invoke('fetch-registry'),
-    findInstalledRegistryItem: (payload) => invoke('find-installed-registry-item', payload),
-    installRegistryItem: (payload) => invoke('install-registry-item', payload),
-    uninstallRegistryItem: (payload) => invoke('uninstall-registry-item', payload),
     openExternalUrl: (url) => invoke('open-external-url', { url }),
     invoke,
-    _invokePip: () => Promise.resolve(false),
-    togglePlayerPiP: () => Promise.resolve(window.__stremioCustomPipToggle?.() ?? false),
-    enterPlayerPiP: () => Promise.resolve(window.__stremioCustomPipEnter?.() ?? false),
-    exitPlayerPiP: () => Promise.resolve(window.__stremioCustomPipExit?.() ?? false),
-    isPlayerPiPActive: () => Boolean(window.__stremioCustomPipMode),
     info: (pluginBaseName, message) => console.info(`[${pluginBaseName}]`, message),
     warn: (pluginBaseName, message) => console.warn(`[${pluginBaseName}]`, message),
     error: (pluginBaseName, message) => console.error(`[${pluginBaseName}]`, message),
@@ -182,6 +173,15 @@
     /data[-_ ]?enrichment/i,
     /meta[-_ ]?hover/i,
   ];
+  const REMOVED_PLUGIN_BASENAMES = new Set([
+    'picture-in-picture.plugin.js',
+    'filter-streams.plugin.js',
+    'enhancements-tweaks.plugin.js',
+    'horizontal-navigation.plugin.js',
+    'card-hover-info.plugin.js',
+    'playback-preview.plugin.js',
+    'trending-anime.plugin.js',
+  ]);
 
   let autoskipCache = { intro: false, credits: false, recap: false };
   let autoskipReady = false;
@@ -756,7 +756,10 @@
     const migrated = [];
     for (const fileRef of enabled) {
       const resolved = await resolvePluginRef(fileRef);
-      if (resolved) migrated.push(resolved);
+      if (!resolved) continue;
+      const baseName = String(resolved).replace(/\\/g, '/').split('/').pop();
+      if (baseName && REMOVED_PLUGIN_BASENAMES.has(baseName)) continue;
+      migrated.push(resolved);
     }
     if (JSON.stringify(migrated) !== JSON.stringify(enabled)) setEnabledPlugins(migrated);
     return migrated;
@@ -795,7 +798,6 @@
     'interface/enhanced-titlebar.plugin.js',
     'player/tidb.plugin.js',
     'player/enhanced-player.plugin.js',
-    'player/picture-in-picture.plugin.js',
   ]);
 
   const IDLE_DURING_PLAYBACK_PREFIXES = [
@@ -804,7 +806,6 @@
     'addons/',
     'utilities/',
     'player/stream-ui.plugin.js',
-    'player/filter-streams.plugin.js',
     'player/stream-quality-picker.plugin.js',
   ];
 
@@ -975,44 +976,7 @@
     persistUserPreferences();
   }
 
-  function installNavigationShield() {
-    return;
-    const SHIELD_ID = 'stremio-custom-nav-shield';
-    let hideTimer = null;
-    const ensure = () => {
-      let shield = document.getElementById(SHIELD_ID);
-      if (shield) return shield;
-      shield = document.createElement('div');
-      shield.id = SHIELD_ID;
-      shield.style.cssText =
-        'position:fixed;inset:0;z-index:120;opacity:0;display:none;pointer-events:none;' +
-        'transition:opacity 120ms ease;background:rgb(20,20,20);';
-      document.body.appendChild(shield);
-      return shield;
-    };
-    const showBrief = (ms = 220) => {
-      const shield = ensure();
-      if (!shield) return;
-      shield.style.display = 'block';
-      shield.style.opacity = '1';
-      if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(() => {
-        shield.style.opacity = '0';
-        setTimeout(() => {
-          if (shield.style.opacity === '0') shield.style.display = 'none';
-        }, 140);
-      }, ms);
-    };
-    const watchRoute = () => {
-      showBrief(180);
-      if (/#\/player/.test(location.hash || '')) {
-        showBrief(320);
-      }
-    };
-    if (document.body) showBrief(420);
-    window.addEventListener('hashchange', watchRoute);
-    document.addEventListener('stremio-custom-bootstrap-ready', () => showBrief(120));
-  }
+  function installNavigationShield() {}
 
   window.StremioCustomAutoskip = {
     ...(window.StremioCustomAutoskip || {}),
@@ -1074,7 +1038,6 @@
     installNavigationShield();
     await hydrateUserPreferences();
     await ensureDefaultPluginsEnabled();
-    removeHorizontalNavPluginFromEnabled();
     pathsCache = await api.getPaths();
     window.__stremioLanguageNames = await invoke('read-language-names');
     await ensureThemeApplied();

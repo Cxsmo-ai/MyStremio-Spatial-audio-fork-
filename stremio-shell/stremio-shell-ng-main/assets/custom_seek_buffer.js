@@ -14,6 +14,7 @@
   let lastCurrentTime = 0;
   let estimatedAheadSec = 0;
   let lastAdvanceAt = 0;
+  let hoverBoundSlider = null;
 
   function parseShellPayload(raw) {
     if (raw == null) return null;
@@ -79,8 +80,49 @@
       [class*="seek-bar-container"] [class*="slider-container"] [class*="thumb"] {
         z-index: 4 !important;
       }
+
+      #stremio-custom-seek-hover-time {
+        position: fixed !important;
+        z-index: 2147482000 !important;
+        pointer-events: none !important;
+        padding: 0.28rem 0.62rem !important;
+        border-radius: 999px !important;
+        background: rgba(30, 30, 30, 0.78) !important;
+        color: #fff !important;
+        font-size: 0.85rem !important;
+        line-height: 1.1 !important;
+        font-weight: 600 !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        box-shadow:
+          0 8px 24px rgba(0, 0, 0, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+        backdrop-filter: blur(14px) saturate(170%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(170%) !important;
+        transform: translate(-50%, -84%) !important;
+        display: none;
+        white-space: nowrap;
+      }
     `;
     (document.head || document.documentElement).appendChild(style);
+  }
+
+  function formatTime(seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function getHoverTooltip() {
+    let el = document.getElementById('stremio-custom-seek-hover-time');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'stremio-custom-seek-hover-time';
+      document.body.appendChild(el);
+    }
+    return el;
   }
 
   function handleMpvPropChange(payload) {
@@ -171,6 +213,38 @@
     );
   }
 
+  function bindHoverPreview(slider) {
+    if (!slider || slider === hoverBoundSlider) return;
+    hoverBoundSlider = slider;
+    const tooltip = getHoverTooltip();
+
+    const hide = () => {
+      tooltip.style.display = 'none';
+    };
+
+    const showAt = (event) => {
+      const rect = slider.getBoundingClientRect();
+      if (rect.width <= 0) return hide();
+      const duration =
+        window.StremioCustomPlayback?.getDuration?.() || mpvDuration || readDurationFromDom() || 0;
+      if (!Number.isFinite(duration) || duration <= 0) return hide();
+
+      const x = Math.max(rect.left, Math.min(event.clientX, rect.right));
+      const ratio = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+      const seconds = duration * ratio;
+
+      tooltip.textContent = formatTime(seconds);
+      tooltip.style.left = `${x}px`;
+      tooltip.style.top = `${rect.top}px`;
+      tooltip.style.display = 'block';
+    };
+
+    slider.addEventListener('mouseenter', showAt);
+    slider.addEventListener('mousemove', showAt);
+    slider.addEventListener('mouseleave', hide);
+    slider.addEventListener('pointerleave', hide);
+  }
+
   function getTrackBefore(slider) {
     return slider?.querySelector('[class*="track-before"]') || null;
   }
@@ -257,6 +331,7 @@
       return;
     }
     hookMpvMessages();
+    bindHoverPreview(getSeekSlider());
     updateBufferBar();
     rafId = requestAnimationFrame(tick);
   }

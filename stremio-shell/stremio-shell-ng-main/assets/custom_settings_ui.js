@@ -1157,6 +1157,14 @@ function createPluginSettingField(pluginBaseName, field, classes, config) {
     links.push({ label: 'Open TMDB API page', url: 'https://www.themoviedb.org/settings/api' });
   }
   if (
+    pluginBaseName === 'data-enrichment' &&
+    (field.key === 'rpdbApiKey' ||
+      lowerDescription.includes('ratingposterdb.com') ||
+      lowerDescription.includes('rpdb'))
+  ) {
+    links.push({ label: 'Open RPDB API page', url: 'https://ratingposterdb.com' });
+  }
+  if (
     (pluginBaseName === 'tidb' && lowerDescription.includes('theintrodb.org')) ||
     (pluginBaseName === 'tidb' && field.key === 'tidb_api_key')
   ) {

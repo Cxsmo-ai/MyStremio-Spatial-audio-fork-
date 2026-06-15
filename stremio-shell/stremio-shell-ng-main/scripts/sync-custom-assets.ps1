@@ -197,6 +197,181 @@ function Patch-StreamUiPlugin {
     }
 }
 
+function Patch-HeroDivPlugin {
+    param([string]$PluginsDir)
+
+    if (-not (Test-Path $PluginsDir)) { return }
+    $pluginPath = Join-Path $PluginsDir "interface\hero-div.plugin.js"
+    if (-not (Test-Path $pluginPath)) { return }
+
+    try {
+        $raw = Get-Content $pluginPath -Raw -Encoding UTF8
+        if (-not $raw) { return }
+        $patched = $raw.Replace(
+            "margin-top: -15px !important;",
+            "margin-top: 0 !important;"
+        ).Replace(
+            "min-height: 900px;",
+            "min-height: 900px;`r`n                    border-top: 0 !important;"
+        )
+        if ($patched -ne $raw) {
+            Set-Content -Path $pluginPath -Value $patched -Encoding UTF8
+            Write-Host "Patched hero-div plugin top spacing to remove frame seam."
+        }
+    } catch {
+        Write-Warning ("Could not patch hero-div plugin in " + $PluginsDir + ": " + $_)
+    }
+}
+
+function Remove-DeprecatedAssets {
+    param(
+        [string]$PluginsDir,
+        [string]$ThemesDir
+    )
+
+    $deprecatedPlugins = @(
+        "player\picture-in-picture.plugin.js",
+        "player\filter-streams.plugin.js",
+        "interface\enhancements-tweaks.plugin.js",
+        "interface\horizontal-navigation.plugin.js",
+        "metadata\card-hover-info.plugin.js",
+        "metadata\playback-preview.plugin.js",
+        "metadata\trending-anime.plugin.js"
+    )
+    $deprecatedThemes = @(
+        "amoled.theme.css",
+        "hide-titlebar-buttons.theme.css"
+    )
+
+    if (Test-Path $PluginsDir) {
+        foreach ($rel in $deprecatedPlugins) {
+            $path = Join-Path $PluginsDir $rel
+            if (Test-Path $path) {
+                Remove-Item -Path $path -Force
+                Write-Host "Removed deprecated plugin: $rel"
+            }
+        }
+    }
+
+    if (Test-Path $ThemesDir) {
+        foreach ($rel in $deprecatedThemes) {
+            $path = Join-Path $ThemesDir $rel
+            if (Test-Path $path) {
+                Remove-Item -Path $path -Force
+                Write-Host "Removed deprecated theme: $rel"
+            }
+        }
+    }
+}
+
+function Patch-DataEnrichmentPlugin {
+    param([string]$PluginsDir)
+
+    if (-not (Test-Path $PluginsDir)) { return }
+    $pluginPath = Join-Path $PluginsDir "metadata\data-enrichment.plugin.js"
+    if (-not (Test-Path $pluginPath)) { return }
+
+    try {
+        $raw = Get-Content $pluginPath -Raw -Encoding UTF8
+        if (-not $raw) { return }
+        $patched = $raw
+
+        $patched = $patched.Replace(
+            "                '[class*=""details-container""]',`r`n                '[class*=""side-drawer""]',`r`n                '[class*=""description-container""]',`r`n                '[class*=""menu-container""]',",
+            "                '[class*=""details-container""]',`r`n                '[class*=""side-drawer""]',"
+        )
+
+        $patched = $patched.Replace(
+            "                if (element) return element;",
+            "                if (element && !element.closest('[class*=""player-container""], [class*=""control-bar-layer""], [class*=""subtitles-menu-container""]')) return element;"
+        )
+
+        if ($patched -ne $raw) {
+            Set-Content -Path $pluginPath -Value $patched -Encoding UTF8
+            Write-Host "Patched data-enrichment mount guards to avoid player UI injection."
+        }
+    } catch {
+        Write-Warning ("Could not patch data-enrichment plugin in " + $PluginsDir + ": " + $_)
+    }
+}
+
+function Patch-EnhancedPlayerPlugin {
+    param([string]$PluginsDir)
+
+    if (-not (Test-Path $PluginsDir)) { return }
+    $pluginPath = Join-Path $PluginsDir "player\enhanced-player.plugin.js"
+    if (-not (Test-Path $pluginPath)) { return }
+
+    try {
+        $raw = Get-Content $pluginPath -Raw -Encoding UTF8
+        if (-not $raw) { return }
+        $patched = $raw.Replace(
+            "background: rgba(70, 70, 70, 0.28);",
+            "background: rgba(70, 70, 70, 0.22);"
+        ).Replace(
+            "background: rgba(70, 70, 70, 0.22); border: 1px solid rgba(255,255,255,0.08);",
+            "background: rgba(70, 70, 70, 0.16); border: 1px solid rgba(255,255,255,0.08);"
+        ).Replace(
+            "background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);",
+            "background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7);"
+        ).Replace(
+            "border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);",
+            "border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05);"
+        )
+        if ($patched -ne $raw) {
+            Set-Content -Path $pluginPath -Value $patched -Encoding UTF8
+            Write-Host "Patched enhanced-player subtitle panel opacity for Liquid Glass."
+        }
+    } catch {
+        Write-Warning ("Could not patch enhanced-player plugin in " + $PluginsDir + ": " + $_)
+    }
+}
+
+function Patch-LiquidGlassTheme {
+    param([string]$ThemesDir)
+
+    if (-not (Test-Path $ThemesDir)) { return }
+    $themePath = Join-Path $ThemesDir "liquid-glass.theme.css"
+    if (-not (Test-Path $themePath)) { return }
+
+    try {
+        $raw = Get-Content $themePath -Raw -Encoding UTF8
+        if (-not $raw) { return }
+
+        $patched = $raw.Replace(
+            "top: 0.5px !important;",
+            "top: 0 !important;"
+        )
+
+        $seamBlock = @"
+
+/* hard seam fix between window frame and hero/nav */
+#app,
+#app [class*="main-nav-bars-container"],
+#app nav[class*="horizontal-nav-bar"],
+.hero-container {
+    border-top: 0 !important;
+}
+#app::before,
+#app [class*="main-nav-bars-container"]::before,
+#app nav[class*="horizontal-nav-bar"]::before,
+.hero-container::before {
+    display: none !important;
+}
+"@
+        if ($patched -notlike "*hard seam fix between window frame and hero/nav*") {
+            $patched += $seamBlock
+        }
+
+        if ($patched -ne $raw) {
+            Set-Content -Path $themePath -Value $patched -Encoding UTF8
+            Write-Host "Patched Liquid Glass theme top seam styles."
+        }
+    } catch {
+        Write-Warning ("Could not patch liquid-glass theme in " + $ThemesDir + ": " + $_)
+    }
+}
+
 if (-not $PluginSource -or -not (Test-Path $PluginSource)) {
     $fallback = Resolve-FallbackSource -Kind "plugins" -ReleaseDir $ReleaseDir
     if ($fallback) {
@@ -221,6 +396,9 @@ foreach ($target in $PluginTargets) {
     Copy-TreeIfExists -Source $PluginSource -Destination $target
     Ensure-StreamUiSchema -PluginsDir $target
     Patch-StreamUiPlugin -PluginsDir $target
+    Patch-HeroDivPlugin -PluginsDir $target
+    Patch-DataEnrichmentPlugin -PluginsDir $target
+    Patch-EnhancedPlayerPlugin -PluginsDir $target
     if ($target -eq (Join-Path $ReleaseDir "plugins")) {
         Sanitize-PluginConfigs -PluginsDir $target
         Patch-ContextMenuFixPlugin -PluginsDir $target
@@ -230,6 +408,14 @@ foreach ($target in $PluginTargets) {
 foreach ($target in $ThemeTargets) {
     if ($SkipAppData -and $target -like "$env:APPDATA*") { continue }
     Copy-TreeIfExists -Source $ThemeSource -Destination $target
+    Patch-LiquidGlassTheme -ThemesDir $target
+}
+
+for ($i = 0; $i -lt $PluginTargets.Count; $i++) {
+    $pluginTarget = $PluginTargets[$i]
+    $themeTarget = $ThemeTargets[$i]
+    if ($SkipAppData -and $pluginTarget -like "$env:APPDATA*") { continue }
+    Remove-DeprecatedAssets -PluginsDir $pluginTarget -ThemesDir $themeTarget
 }
 
 Write-Host "Custom assets synced."

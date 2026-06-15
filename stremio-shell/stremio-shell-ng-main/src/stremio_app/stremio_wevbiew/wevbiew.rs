@@ -227,7 +227,6 @@ impl PartialUi for WebView {
                             for script in [
                                 include_str!("../../../assets/custom_bootstrap.js"),
                                 include_str!("../../../assets/custom_scroll_restore.js"),
-                                include_str!("../../../assets/custom_pip.js"),
                                 include_str!("../../../assets/custom_player_glass.js"),
                                 include_str!("../../../assets/custom_player_loading.js"),
                                 include_str!("../../../assets/custom_liquid_glass_nav.js"),
@@ -237,7 +236,6 @@ impl PartialUi for WebView {
                                 include_str!("../../../assets/custom_favorite_languages_page.js"),
                                 include_str!("../../../assets/custom_favorite_languages.js"),
                                 include_str!("../../../assets/custom_autoskip.js"),
-                                include_str!("../../../assets/custom_marketplace.js"),
                                 include_str!("../../../assets/custom_library_folders.js"),
                                 include_str!("../../../assets/custom_cinebye_addons.js"),
                                 include_str!("../../../assets/custom_discord_presence.js"),

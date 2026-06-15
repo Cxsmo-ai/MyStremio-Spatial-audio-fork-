@@ -47,7 +47,7 @@ Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. 
 | Feature | Description |
 |---------|-------------|
 | **Autoskip** | Skip intros, outros, and credits (AniSkip + TheIntroDB integration) |
-| **Seek buffer** | Improved seeking and buffer handling |
+| **Seek buffer** | Improved seeking and buffer handling with hover timestamp preview |
 | **Stream cache** | Caches stream metadata for faster re-selection |
 | **Player glass UI** | Frosted-glass styling on the player overlay |
 | **Player loading** | Enhanced loading states during playback start |
@@ -57,7 +57,6 @@ Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. 
 | **Enhanced external player** | Launch VLC, MPC-HC, and other external players |
 | **Stream UI** | Unified stream list with ratings, accordions, AfterCredits, WatchHub |
 | **Stream quality picker** | Groups streams by resolution with smart ranking and “Best Pick” |
-| **Filter streams** | Filter episode/movie streams by criteria |
 | **AniSkip** | Anime opening/ending skip (Kitsu metadata) |
 | **TheIntroDB** | Skip intros, recaps, credits, and previews |
 
@@ -67,7 +66,7 @@ Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. 
 |---------|-------------|
 | **Library collections** | Create custom folders (Watchlist, Favorites, etc.) via **+** in the library filter bar |
 | **Add to collection** | Right-click or **Shift+click** library items to add/remove from active collection |
-| **Liquid Glass navigation** | Horizontal top navigation integrated with the Liquid Glass theme |
+| **Liquid Glass navigation** | Built-in top navigation styling integrated with the Liquid Glass theme |
 | **Scroll restore** | Remembers scroll position when navigating back |
 | **Slash to search** | Press `/` to focus the search bar from the main menu |
 
@@ -76,13 +75,10 @@ Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. 
 | Feature | Description |
 |---------|-------------|
 | **Liquid Glass theme** | Modern glassmorphism UI (default) |
-| **AMOLED theme** | Pure black theme for OLED displays |
-| **Hide titlebar buttons** | Optional minimal title bar |
 | **Dynamic Hero** | Netflix-style rotating hero banner on the home screen |
 | **Enhanced covers** | Wider Continue Watching posters with logo overlay |
 | **Enhanced title bar** | Extra info in the window title bar |
 | **Context menu fix** | Context menus render above all UI layers |
-| **Enhancements tweaks** | Combined interface and player tweaks |
 | **Custom settings UI** | Dedicated **MyStremio** section in Stremio settings |
 
 ### Metadata & discovery
@@ -91,16 +87,13 @@ Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. 
 |---------|-------------|
 | **Data enrichment** | TMDB-powered cast, similar titles, collections, ratings (requires TMDB API key) |
 | **Meta hover panel** | Rich info panel when hovering posters |
-| **Card hover info** | IMDB rating and release date on card hover |
-| **Trending anime** | Top airing anime row from MyAnimeList |
 
 ### Integrations & utilities
 
 | Feature | Description |
 |---------|-------------|
 | **Discord Rich Presence** | Shows what you are watching in Discord |
-| **Addon marketplace** | Browse and manage custom addon integrations |
-| **Cinebye addons** | Curated addon helpers |
+| **Cinebye addons** | Built-in Cinebye addon helper integration |
 | **DOM inspector** | Developer tool for inspecting Stremio’s DOM |
 | **Plugin initializer** | Loads and validates bundled plugins |
 
@@ -163,9 +156,21 @@ Stremio® is a trademark of Smart Code OOD. This project is a community modifica
 
 - Reduced background maintenance frequency to lower idle CPU and RAM usage.
 - Fixed custom library selection persistence so clicked items no longer stay pinned across Board/Player transitions.
+- Fixed custom library collection persistence across reload/update paths (folders and assigned titles are now retained reliably).
 - Improved start-to-player transition: avoids white flash and keeps dark/poster-first loading visuals.
 - Quick Select language state (favorite and active audio/subtitle choices) now persists across app sessions.
+- Discord Rich Presence settings now persist reliably across session reloads and app updates/reinstalls.
+- Preload setting persistence was hardened for update/reinstall scenarios.
 - Enabled these plugins by default on first launch: Context Menu Fix, Enhanced Covers, Enhanced Titlebar, Dynamic Hero, Data Enrichment, Meta Hover.
 - Added first-run top-right notice (English) prompting users to add a TMDB API key for Data Enrichment.
+- Fixed Stream UI settings schema loading so Stream UI options are editable again from the MyStremio settings panel.
+- Stream detail accordions now default to closed and remember user open/closed choices for the current session.
+- Added clickable API key helper links in settings for TMDB (Data Enrichment) and TheIntroDB.
+- Plugin category dropdown panels now stay open while scrolling until manually closed.
 - Added short global transition loading mask to hide brief unstyled/plugin-loading UI during app start and page switches.
+- Removed deprecated plugins and themes from app bundle and docs: PiP, Filter Streams, Enhancements Tweaks, Horizontal Navigation, Card Hover Info, Playback Preview, Trending Anime, AMOLED, Hide Titlebar Buttons.
+- Removed remaining Community Market integration code paths and references.
+- Fixed Data Enrichment mount targeting to avoid UI bleed into the bottom player bar when launching playback from board cards.
+- Added RPDB helper link in Data Enrichment settings (next to TMDB/TheIntroDB helper links).
+- Added seek-bar hover timestamp preview with Liquid Glass styling and tuned closer placement/legibility.
 - Updated release metadata and app version to `2.1.2`.

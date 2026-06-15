@@ -14,6 +14,7 @@ use winapi::um::winuser::{
 
 const DWMWA_CAPTION_COLOR: DWORD = 35;
 const DWMWA_TEXT_COLOR: DWORD = 36;
+const DWMWA_BORDER_COLOR: DWORD = 34;
 const STREMIO_CAPTION_COLOR: DWORD = colorref(20, 20, 20);
 const WHITE_TEXT_COLOR: DWORD = colorref(0xff, 0xff, 0xff);
 
@@ -102,6 +103,12 @@ impl WindowStyle {
     }
     pub fn set_title_bar_color(&self, hwnd: HWND) {
         unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_BORDER_COLOR,
+                &STREMIO_CAPTION_COLOR as *const _ as *const c_void,
+                mem::size_of_val(&STREMIO_CAPTION_COLOR) as DWORD,
+            );
             DwmSetWindowAttribute(
                 hwnd,
                 DWMWA_CAPTION_COLOR,

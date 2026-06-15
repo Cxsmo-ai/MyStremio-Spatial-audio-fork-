@@ -1,5 +1,4 @@
 mod paths;
-mod registry;
 mod storage;
 
 use crate::stremio_app::discord_presence;
@@ -125,34 +124,14 @@ pub fn handle_request(message: &Value) -> Option<String> {
             let plugin = params.get("pluginBaseName").and_then(|v| v.as_str()).unwrap_or("");
             json!(clear_registered_schema(schemas(), plugin))
         }
-        "fetch-registry" => match registry::fetch_registry() {
-            Ok(registry) => registry,
-            Err(error) => return Some(error_response(id, &error)),
-        },
-        "find-installed-registry-item" => {
-            let item_type = params.get("type").and_then(|v| v.as_str()).unwrap_or("");
-            let download = params.get("download").and_then(|v| v.as_str()).unwrap_or("");
-            let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            json!(registry::find_installed_item(item_type, download, name))
-        }
-        "install-registry-item" => {
-            let download = params.get("download").and_then(|v| v.as_str()).unwrap_or("");
-            let item_type = params.get("type").and_then(|v| v.as_str()).unwrap_or("");
-            let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let category = params.get("category").and_then(|v| v.as_str());
-            match registry::install_registry_item(download, item_type, name, category) {
-                Ok(result) => result,
-                Err(error) => return Some(error_response(id, &error)),
-            }
-        }
-        "uninstall-registry-item" => {
-            let item_type = params.get("type").and_then(|v| v.as_str()).unwrap_or("");
-            let file_ref = params.get("fileRef").and_then(|v| v.as_str()).unwrap_or("");
-            json!(registry::uninstall_registry_item(item_type, file_ref))
-        }
         "open-external-url" => {
             let url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
-            json!(registry::open_external_url(url))
+            let opened = if url.starts_with("https://") || url.starts_with("http://") {
+                open::that(url).is_ok()
+            } else {
+                false
+            };
+            json!(opened)
         }
         "update-discord-presence" => {
             match discord_presence::update_presence(&params) {

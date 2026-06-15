@@ -92,6 +92,12 @@ function Ensure-MpvImportLib {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ImportLib)) {
         throw "Failed to generate import library: $ImportLib"
     }
+
+    # Keep only import artifacts in mpv-x64; runtime DLL is copied to release output later.
+    $ImportDll = Join-Path $ImportDir "libmpv-2.dll"
+    if (Test-Path $ImportDll) {
+        Remove-Item -Path $ImportDll -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Ensure-Cargo {
