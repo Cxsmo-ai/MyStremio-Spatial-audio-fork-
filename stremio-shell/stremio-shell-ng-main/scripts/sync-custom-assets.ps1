@@ -167,16 +167,24 @@ function Patch-StreamUiPlugin {
         if (-not $raw) { return }
         $patched = $raw
         $patched = $patched.Replace(
-            "acc.className = GROUP + (open ? ' open' : '');",
-            "acc.className = GROUP + ' open';"
+            "const GROUP = 'sui-aio-group';",
+            "const GROUP = 'sui-aio-group';`r`n    const OPEN_STATE_KEY = 'sui-open-accordions';"
         )
         $patched = $patched.Replace(
-            'aria-expanded="${open ? ''true'' : ''false''}"',
-            'aria-expanded="true"'
+            "function collectOpenKeys() {`r`n      const open = new Set();`r`n      document.querySelectorAll(`${GROUP}.open`).forEach((group) => {`r`n        const type = group.getAttribute('data-sui-acc') || '';`r`n        const name = group.querySelector('.sui-aio-name')?.textContent?.trim() || '';`r`n        if (type && name) open.add(`${type}:${name}`);`r`n      });`r`n      return open;`r`n    }",
+            "function collectOpenKeys() {`r`n      const open = new Set();`r`n      try {`r`n        const raw = sessionStorage.getItem(OPEN_STATE_KEY);`r`n        const parsed = raw ? JSON.parse(raw) : [];`r`n        if (Array.isArray(parsed)) {`r`n          parsed.forEach((key) => {`r`n            if (typeof key === 'string' && key) open.add(key);`r`n          });`r`n        }`r`n      } catch (_) {}`r`n      return open;`r`n    }"
+        )
+        $patched = $patched.Replace(
+            "function shell(meta, open) {",
+            "function persistOpenKeys() {`r`n      const open = [];`r`n      document.querySelectorAll(`${GROUP}.open`).forEach((group) => {`r`n        const type = group.getAttribute('data-sui-acc') || '';`r`n        const name = group.querySelector('.sui-aio-name')?.textContent?.trim() || '';`r`n        if (type && name) open.push(`${type}:${name}`);`r`n      });`r`n      try {`r`n        sessionStorage.setItem(OPEN_STATE_KEY, JSON.stringify(open));`r`n      } catch (_) {}`r`n    }`r`n`r`n    function shell(meta, open) {"
+        )
+        $patched = $patched.Replace(
+            "        header.setAttribute('aria-expanded', String(isOpen));",
+            "        header.setAttribute('aria-expanded', String(isOpen));`r`n        persistOpenKeys();"
         )
         if ($patched -ne $raw) {
             Set-Content -Path $pluginPath -Value $patched -Encoding UTF8
-            Write-Host "Patched Stream UI plugin to keep accordions expanded by default."
+            Write-Host "Patched Stream UI plugin accordion state persistence."
         }
     } catch {
         Write-Warning ("Could not patch Stream UI plugin in " + $PluginsDir + ": " + $_)

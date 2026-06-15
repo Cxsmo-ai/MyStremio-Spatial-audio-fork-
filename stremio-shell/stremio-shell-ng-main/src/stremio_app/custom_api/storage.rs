@@ -224,7 +224,8 @@ pub fn load_registered_schemas() -> RegisteredSchemas {
         };
         let path = plugins_dir().join(&file);
         if let Ok(content) = fs::read_to_string(path) {
-            if let Ok(schema) = serde_json::from_str::<Value>(&content) {
+            let normalized = content.trim_start_matches('\u{feff}');
+            if let Ok(schema) = serde_json::from_str::<Value>(normalized) {
                 schemas.insert(base_name, schema);
             }
         }
