@@ -1,0 +1,55 @@
+[
+  {
+    "defaultValue": "",
+    "key": "tidb_api_key",
+    "label": "TIDB API Key",
+    "type": "input"
+  },
+  {
+    "defaultValue": "default",
+    "key": "tidb_theme",
+    "label": "Button Theme",
+    "options": [
+      {
+        "label": "Default",
+        "value": "default"
+      },
+      {
+        "label": "Glass",
+        "value": "glass"
+      }
+    ],
+    "type": "select"
+  },
+  {
+    "defaultValue": true,
+    "key": "show_intro_button",
+    "label": "Show Intro Button",
+    "type": "toggle"
+  },
+  {
+    "defaultValue": true,
+    "key": "show_recap_button",
+    "label": "Show Recap Button",
+    "type": "toggle"
+  },
+  {
+    "defaultValue": true,
+    "key": "show_credits_button",
+    "label": "Show Credits Button",
+    "type": "toggle"
+  },
+  {
+    "defaultValue": true,
+    "key": "show_preview_button",
+    "label": "Show Preview Button",
+    "type": "toggle"
+  },
+  {
+    "defaultValue": true,
+    "description": "Send anonymous feature usage events (e.g. button shown/clicked) to help improve the plugin. No media IDs or titles are sent.",
+    "key": "anonymous_usage_reporting",
+    "label": "Anonymous usage reporting",
+    "type": "toggle"
+  }
+]

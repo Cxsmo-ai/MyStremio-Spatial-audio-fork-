@@ -7,6 +7,11 @@ param(
 $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 $ReleaseDir = Join-Path $ProjectRoot "target\$Target\release"
+$RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "..\.."))
+$DefaultAssetSource = Join-Path $RepoRoot "assets-bundle"
+if (-not $env:MYSTREMIO_ASSET_SOURCE_ROOT) {
+    $env:MYSTREMIO_ASSET_SOURCE_ROOT = $DefaultAssetSource
+}
 
 function Get-VsInstallPath {
     $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"

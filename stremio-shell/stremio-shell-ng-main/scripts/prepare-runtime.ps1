@@ -98,4 +98,7 @@ if (-not $LibMpvCopied) {
 
 Write-Host "Runtime files prepared in $OutputDir"
 
-& (Join-Path $PSScriptRoot "sync-custom-assets.ps1") -ReleaseDir $OutputDir -SkipAppData
+if (-not $env:MYSTREMIO_ASSET_SOURCE_ROOT) {
+    throw "MYSTREMIO_ASSET_SOURCE_ROOT is not set. Build now requires an explicit project asset source."
+}
+& (Join-Path $PSScriptRoot "sync-custom-assets.ps1") -ReleaseDir $OutputDir -SourceRoot $env:MYSTREMIO_ASSET_SOURCE_ROOT

@@ -1,0 +1,1228 @@
+/**
+ * @name Meta Hover Panel
+ * @description Rich movie/series info panel on poster hover using Cinemeta metadata.
+ * @version 2.0.0
+ * @author StremioCustom
+ * @category Metadata
+ */
+
+(function () {
+  'use strict';
+
+  const CONFIG = {
+    HOVER_DELAY: 450,
+    API_BASE: 'https://v3-cinemeta.strem.io/meta',
+    API_TIMEOUT: 6000,
+    CACHE_SIZE: 80,
+    PANEL_WIDTH: 420,
+    MAX_CAST: 4,
+    MAX_GENRES: 6,
+  };
+
+  const metaCache = new Map();
+  const photoCache = new Map();
+  const imdbResolveCache = new Map();
+  let hoverTimer = null;
+  let activePanel = null;
+  let activeAnchor = null;
+  let trackedAnchor = null;
+  let showGeneration = 0;
+  let moveRaf = null;
+  let catalogCache = { at: 0, items: [] };
+
+  const styles = `
+    .meta-hover-panel {
+      position: fixed;
+      width: ${CONFIG.PANEL_WIDTH}px;
+      max-height: min(78vh, 640px);
+      overflow: hidden auto;
+      z-index: 100001;
+      border-radius: 14px;
+      background: rgba(18, 18, 22, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(123, 91, 245, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(18px) saturate(160%);
+      color: #fff;
+      font-family: inherit;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .meta-hover-panel.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .meta-hover-panel-header {
+      padding: 1.1rem 1.15rem 0.85rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .meta-hover-panel-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      line-height: 1.25;
+      margin-bottom: 0.45rem;
+    }
+
+    .meta-hover-panel-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      align-items: center;
+      font-size: 0.82rem;
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    .meta-hover-panel-imdb {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: linear-gradient(135deg, #f5c518, #e4b00d);
+      color: #111;
+      font-weight: 800;
+      font-size: 0.68rem;
+      padding: 0.15rem 0.35rem;
+      border-radius: 3px;
+    }
+
+    .meta-hover-panel-rating {
+      font-weight: 700;
+      color: #f5c518;
+    }
+
+    .meta-hover-panel-section {
+      padding: 0.85rem 1.15rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .meta-hover-panel-section:last-child {
+      border-bottom: none;
+    }
+
+    .meta-hover-panel-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: rgba(255, 255, 255, 0.45);
+      margin-bottom: 0.45rem;
+    }
+
+    .meta-hover-panel-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .meta-hover-panel-tag {
+      padding: 0.28rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.78rem;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .meta-hover-panel-plot {
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.82);
+      display: -webkit-box;
+      -webkit-line-clamp: 5;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .meta-hover-panel-person {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .meta-hover-panel-person img {
+      width: 2.4rem;
+      height: 2.4rem;
+      border-radius: 50%;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .meta-hover-panel-person-name {
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .meta-hover-panel-person-role {
+      font-size: 0.76rem;
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    .meta-hover-panel-cast-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+    }
+
+    .meta-hover-panel-loading {
+      padding: 1.25rem 1.15rem;
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.6);
+    }
+  `;
+
+  function injectStyles() {
+    if (document.getElementById('meta-hover-panel-css')) return;
+    const style = document.createElement('style');
+    style.id = 'meta-hover-panel-css';
+    style.textContent = styles;
+    document.head.appendChild(style);
+  }
+
+  function extractImdbFromSource(text) {
+    if (!text || typeof text !== 'string') return null;
+    const match = text.match(/tt\d{7,}/i);
+    return match ? match[0].toLowerCase() : null;
+  }
+
+  function normalizeTitle(text) {
+    return (text || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function getPosterImdbId(root) {
+    if (!root) return null;
+    const nodes = [root, ...root.querySelectorAll('img, a[href], [data-imdb-id], [data-id]')];
+    for (const node of nodes) {
+      const attrs = [
+        node.getAttribute?.('data-imdb-id'),
+        node.getAttribute?.('data-id'),
+        node.getAttribute?.('href'),
+        node.getAttribute?.('src'),
+        node.getAttribute?.('data-src'),
+        node.getAttribute?.('data-original'),
+      ];
+      for (const value of attrs) {
+        const id = extractImdbFromSource(value);
+        if (id) return id;
+      }
+    }
+    return null;
+  }
+
+  function findCatalogMatch(items, title, posterImdbId) {
+    const norm = normalizeTitle(title);
+    if (!norm && !posterImdbId) return null;
+
+    if (posterImdbId) {
+      const byImdb = items.find((item) => extractImdbFromItem(item) === posterImdbId);
+      if (byImdb) return byImdb;
+    }
+
+    if (!norm) return null;
+
+    const exact = items.find((item) => normalizeTitle(item?.name) === norm);
+    if (exact) return exact;
+
+    const candidates = items.filter((item) => {
+      const itemTitle = normalizeTitle(item?.name);
+      if (!itemTitle) return false;
+      return itemTitle === norm
+        || itemTitle.startsWith(`${norm} `)
+        || itemTitle.startsWith(`${norm}:`)
+        || itemTitle.startsWith(`${norm}-`);
+    });
+
+    if (candidates.length === 1) return candidates[0];
+    if (candidates.length > 1 && posterImdbId) {
+      return candidates.find((item) => extractImdbFromItem(item) === posterImdbId) || null;
+    }
+
+    return null;
+  }
+
+  function parseMediaFromHref(href) {
+    if (!href) return null;
+
+    const patterns = [
+      /\/(?:detail|metadetails)\/(movie|series)\/([^/?#]+)/i,
+      /\/player\/[^/]+\/[^/]+\/[^/]+\/(movie|series)\/([^/?#]+)/i,
+      /\/library\/(movie|series)\/([^/?#]+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = href.match(pattern);
+      if (match) {
+        return { type: match[1].toLowerCase(), id: decodeURIComponent(match[2]) };
+      }
+    }
+
+    const imdbMatch = href.match(/tt\d{7,}/i);
+    if (imdbMatch) {
+      const type = /series|episode|season/i.test(href) ? 'series' : 'movie';
+      return { type, id: imdbMatch[0] };
+    }
+
+    return null;
+  }
+
+  function parseMediaFromText(text) {
+    if (!text) return null;
+    const imdbMatch = text.match(/tt\d{7,}/i);
+    if (!imdbMatch) return null;
+    const type = /series|episode|season/i.test(text) ? 'series' : 'movie';
+    return { type, id: imdbMatch[0] };
+  }
+
+  function getItemTitle(root) {
+    return (
+      root.querySelector('[class*="title-label"]')?.textContent?.trim() ||
+      root.querySelector('[class*="title-bar"] [class*="title"]')?.textContent?.trim() ||
+      root.getAttribute('title')?.trim() ||
+      ''
+    );
+  }
+
+  async function loadCatalogItems() {
+    if (Date.now() - catalogCache.at < 4000) {
+      return catalogCache.items;
+    }
+
+    const models = ['continue_watching_preview', 'continue_watching', 'library'];
+    const items = [];
+
+    for (const model of models) {
+      try {
+        const state = await window.services?.core?.transport?.getState(model);
+        if (Array.isArray(state?.items)) {
+          items.push(...state.items);
+        }
+        if (Array.isArray(state?.catalog)) {
+          items.push(...state.catalog);
+        }
+      } catch {
+        // Ignore unavailable models.
+      }
+    }
+
+    catalogCache = { at: Date.now(), items };
+    return items;
+  }
+
+  function normalizeMediaType(itemOrType) {
+    const raw =
+      typeof itemOrType === 'string'
+        ? itemOrType
+        : itemOrType?.type || itemOrType?.contentType || 'movie';
+    const value = String(raw).toLowerCase();
+    return value === 'series' || value === 'tv' || value === 'episode' ? 'series' : 'movie';
+  }
+
+  function extractImdbFromItem(item) {
+    if (!item) return null;
+
+    const candidates = [item.imdb_id, item.imdbId, item.ids?.imdb, item.id, item._id];
+    for (const value of candidates) {
+      if (typeof value !== 'string') continue;
+      const match = value.match(/tt\d{7,}/i);
+      if (match) return match[0].toLowerCase();
+    }
+
+    if (typeof item.series === 'string') {
+      const seriesMatch = item.series.match(/tt\d{7,}/i);
+      if (seriesMatch) return seriesMatch[0].toLowerCase();
+    }
+
+    if (Array.isArray(item.links)) {
+      for (const link of item.links) {
+        const source = [link.url, link.href, link.name, link.id].filter(Boolean).join(' ');
+        const match = source.match(/tt\d{7,}/i);
+        if (match) return match[0].toLowerCase();
+      }
+    }
+
+    return null;
+  }
+
+  function mediaFromCatalogItem(item) {
+    if (!item) return null;
+
+    const type = normalizeMediaType(item);
+    const imdbId = extractImdbFromItem(item);
+    if (imdbId) {
+      return { type, id: imdbId, item };
+    }
+
+    const rawId = typeof item.id === 'string' ? item.id : '';
+    const tmdbMatch = rawId.match(/^tmdb:(\d+)$/i);
+    if (tmdbMatch) {
+      return { type, id: rawId, tmdbId: tmdbMatch[1], item };
+    }
+
+    return null;
+  }
+
+  function getCardIndex(root) {
+    const list = root.closest('[class*="meta-items-container"]');
+    if (!list) return -1;
+
+    const card = root.closest('[class*="meta-item"]');
+    if (card && list.contains(card)) {
+      const cards = Array.from(list.querySelectorAll(':scope > [class*="meta-item"]'));
+      const index = cards.indexOf(card);
+      if (index >= 0) return index;
+    }
+
+    const container = root.closest('[class*="meta-item-container"]');
+    if (container) {
+      const containers = Array.from(list.querySelectorAll('[class*="meta-item-container"]'));
+      const index = containers.indexOf(container);
+      if (index >= 0) return index;
+    }
+
+    return -1;
+  }
+
+  function isContinueWatchingRow(root) {
+    const row = root.closest('[class*="meta-row-container"], [class*="continue-watching"]');
+    if (!row) {
+      return /#\/continuewatching/i.test(location.hash);
+    }
+
+    if (row.className.includes('continue-watching')) return true;
+
+    const title = row.querySelector('[class*="title-container"]')?.textContent || '';
+    return /continue watching|weiterschauen|continuar|reprise|seguir/i.test(title);
+  }
+
+  async function resolveByRowIndex(root) {
+    const index = getCardIndex(root);
+    if (index < 0) return null;
+
+    const models = isContinueWatchingRow(root)
+      ? ['continue_watching', 'continue_watching_preview']
+      : /#\/continuewatching/i.test(location.hash)
+        ? ['continue_watching']
+        : [];
+
+    for (const model of models) {
+      try {
+        const state = await window.services?.core?.transport?.getState(model);
+        const items = state?.items || state?.catalog || [];
+        const media = mediaFromCatalogItem(items[index]);
+        if (media) return media;
+      } catch {
+        // Try next model.
+      }
+    }
+
+    return null;
+  }
+
+  async function resolveFromCatalog(root) {
+    const byIndex = await resolveByRowIndex(root);
+    if (byIndex) return byIndex;
+
+    const title = getItemTitle(root);
+    const posterImdbId = getPosterImdbId(root);
+    if (!title && !posterImdbId) return null;
+
+    const items = await loadCatalogItems();
+    const match = findCatalogMatch(items, title, posterImdbId);
+    return mediaFromCatalogItem(match);
+  }
+
+  function storeResolvedMedia(root, media) {
+    if (!root || !media?.id) return;
+    if (/^tt\d{7,}$/i.test(media.id)) {
+      root.dataset.metaHoverId = media.id.toLowerCase();
+      root.dataset.metaHoverType = media.type || 'movie';
+    }
+  }
+
+  function annotateMetaItem(root) {
+    if (root.dataset.metaHoverBound === 'true') return;
+    root.dataset.metaHoverBound = 'true';
+
+    const posterId = getPosterImdbId(root);
+    if (posterId) {
+      root.dataset.metaHoverId = posterId;
+      root.dataset.metaHoverType = /series|episode|season/i.test(root.outerHTML) ? 'series' : 'movie';
+    }
+
+    const href = root.href || root.getAttribute('href') || '';
+    const media = parseMediaFromHref(href) || parseMediaFromText(root.outerHTML);
+    if (media && /^tt\d{7,}$/i.test(media.id)) {
+      root.dataset.metaHoverId = media.id.toLowerCase();
+      root.dataset.metaHoverType = media.type;
+    }
+  }
+
+  let annotateTimer = null;
+  function annotateMetaItems() {
+    if (annotateTimer) clearTimeout(annotateTimer);
+    annotateTimer = setTimeout(() => {
+      annotateTimer = null;
+      document.querySelectorAll('[class*="meta-item-container"]').forEach(annotateMetaItem);
+    }, 120);
+  }
+
+  async function extractMediaInfo(element) {
+    const root = element.closest('[class*="meta-item-container"]') || element;
+
+    if (root.dataset.metaHoverId && /^tt\d{7,}$/i.test(root.dataset.metaHoverId)) {
+      return {
+        type: root.dataset.metaHoverType || 'movie',
+        id: root.dataset.metaHoverId.toLowerCase(),
+      };
+    }
+
+    const posterId = getPosterImdbId(root);
+    if (posterId) {
+      const media = {
+        type: /series|episode|season/i.test(root.outerHTML) ? 'series' : 'movie',
+        id: posterId,
+      };
+      storeResolvedMedia(root, media);
+      return media;
+    }
+
+    const byIndex = await resolveByRowIndex(root);
+    if (byIndex) {
+      storeResolvedMedia(root, byIndex);
+      return byIndex;
+    }
+
+    const hrefCandidates = new Set();
+    [root.getAttribute?.('href'), root.href]
+      .filter(Boolean)
+      .forEach((href) => hrefCandidates.add(href));
+
+    root.querySelectorAll('[href]').forEach((node) => {
+      const href = node.getAttribute('href');
+      if (href) hrefCandidates.add(href);
+    });
+
+    for (const href of hrefCandidates) {
+      const media = parseMediaFromHref(href);
+      if (!media) continue;
+
+      if (/^tmdb:/i.test(media.id)) {
+        const titledMedia = { ...media, title: getItemTitle(root), item: null };
+        const fromCatalog = await resolveFromCatalog(root);
+        if (fromCatalog) {
+          storeResolvedMedia(root, fromCatalog);
+          return fromCatalog;
+        }
+        return titledMedia;
+      }
+
+      storeResolvedMedia(root, media);
+      return media;
+    }
+
+    const fromRootText = parseMediaFromText(root.outerHTML);
+    if (fromRootText) {
+      storeResolvedMedia(root, fromRootText);
+      return fromRootText;
+    }
+
+    const fromImg = getPosterImdbId(root);
+    if (fromImg) {
+      const media = {
+        type: /series|episode|season/i.test(root.outerHTML) ? 'series' : 'movie',
+        id: fromImg,
+      };
+      storeResolvedMedia(root, media);
+      return media;
+    }
+
+    const fromCatalog = await resolveFromCatalog(root);
+    if (fromCatalog) {
+      storeResolvedMedia(root, fromCatalog);
+      return fromCatalog;
+    }
+
+    return null;
+  }
+
+  async function resolveImdbId(media) {
+    if (!media?.id) return null;
+
+    const rawId = String(media.id);
+    if (/^tt\d{7,}$/i.test(rawId)) {
+      return rawId.toLowerCase();
+    }
+
+    const cacheKey = `${media.type}:${rawId}`;
+    if (imdbResolveCache.has(cacheKey)) {
+      return imdbResolveCache.get(cacheKey);
+    }
+
+    const fromItem = extractImdbFromItem(media.item);
+    if (fromItem) {
+      imdbResolveCache.set(cacheKey, fromItem);
+      return fromItem;
+    }
+
+    const tmdbId = media.tmdbId || rawId.match(/^tmdb:(\d+)$/i)?.[1];
+    if (tmdbId) {
+      const apiKey = await getTmdbApiKey();
+      if (apiKey) {
+        try {
+          const mediaType = media.type === 'series' ? 'tv' : 'movie';
+          const response = await fetch(
+            `https://api.themoviedb.org/3/${mediaType}/${tmdbId}/external_ids?api_key=${apiKey}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            if (data.imdb_id) {
+              imdbResolveCache.set(cacheKey, data.imdb_id);
+              return data.imdb_id;
+            }
+          }
+        } catch {
+          // Fall through to catalog title match.
+        }
+      }
+
+      const title = media.item?.name?.trim() || media.title?.trim();
+      if (title) {
+        const items = await loadCatalogItems();
+        const match = findCatalogMatch(items, title, null);
+        const imdbId = extractImdbFromItem(match);
+        if (imdbId) {
+          imdbResolveCache.set(cacheKey, imdbId);
+          return imdbId;
+        }
+      }
+    }
+
+    imdbResolveCache.set(cacheKey, null);
+    return null;
+  }
+
+  async function fetchMeta(type, id) {
+    if (!/^tt\d{7,}$/i.test(id)) return null;
+
+    const key = `${type}:${id}`;
+    if (metaCache.has(key)) return metaCache.get(key);
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CONFIG.API_TIMEOUT);
+      const response = await fetch(`${CONFIG.API_BASE}/${type}/${id}.json`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        metaCache.set(key, null);
+        return null;
+      }
+
+      const data = await response.json();
+      const meta = data?.meta || null;
+      if (metaCache.size >= CONFIG.CACHE_SIZE) {
+        metaCache.delete(metaCache.keys().next().value);
+      }
+      metaCache.set(key, meta);
+      return meta;
+    } catch {
+      metaCache.set(key, null);
+      return null;
+    }
+  }
+
+  async function fetchMetaWithFallback(type, id) {
+    let meta = await fetchMeta(type, id);
+    if (meta) return { meta, type };
+    const alt = type === 'series' ? 'movie' : 'series';
+    meta = await fetchMeta(alt, id);
+    return meta ? { meta, type: alt } : null;
+  }
+
+  function getGenres(meta) {
+    if (Array.isArray(meta.genre) && meta.genre.length) return meta.genre;
+    if (!Array.isArray(meta.links)) return [];
+    return meta.links
+      .filter((link) => /genre/i.test(link.category || ''))
+      .map((link) => link.name)
+      .filter(Boolean);
+  }
+
+  function getDirector(meta) {
+    if (Array.isArray(meta.director) && meta.director.length) return meta.director[0];
+    if (!Array.isArray(meta.links)) return null;
+    const link = meta.links.find((l) => /director/i.test(l.category || ''));
+    return link?.name || null;
+  }
+
+  function getCast(meta) {
+    if (Array.isArray(meta.enrichedCast) && meta.enrichedCast.length) {
+      return meta.enrichedCast;
+    }
+
+    if (Array.isArray(meta.cast) && meta.cast.length) {
+      return meta.cast.slice(0, CONFIG.MAX_CAST).map((person) => ({
+        name: person.name || person,
+        character: person.character || '',
+        photo: person.photo || person.image || person.thumbnail || null,
+      }));
+    }
+
+    if (!Array.isArray(meta.links)) return [];
+    return meta.links
+      .filter((link) => /cast|actor/i.test(link.category || ''))
+      .slice(0, CONFIG.MAX_CAST)
+      .map((link) => ({
+        name: link.name,
+        character: link.description || '',
+        photo: link.thumbnail || link.icon || null,
+      }));
+  }
+
+  async function getTmdbApiKey() {
+    try {
+      return (await window.StremioEnhancedAPI?.getSetting('data-enrichment', 'tmdbApiKey')) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function fetchTmdbCast(imdbId, type, apiKey) {
+    const cacheKey = `tmdb:${imdbId}`;
+    if (photoCache.has(cacheKey)) return photoCache.get(cacheKey);
+
+    try {
+      const findResponse = await fetch(
+        `https://api.themoviedb.org/3/find/${imdbId}?api_key=${apiKey}&external_source=imdb_id`
+      );
+      if (!findResponse.ok) return null;
+
+      const findData = await findResponse.json();
+      let tmdbId = null;
+      let mediaType = type === 'series' ? 'tv' : 'movie';
+
+      if (type === 'series' && findData.tv_results?.[0]) {
+        tmdbId = findData.tv_results[0].id;
+        mediaType = 'tv';
+      } else if (findData.movie_results?.[0]) {
+        tmdbId = findData.movie_results[0].id;
+        mediaType = 'movie';
+      } else if (findData.tv_results?.[0]) {
+        tmdbId = findData.tv_results[0].id;
+        mediaType = 'tv';
+      }
+
+      if (!tmdbId) return null;
+
+      const creditsResponse = await fetch(
+        `https://api.themoviedb.org/3/${mediaType}/${tmdbId}/credits?api_key=${apiKey}`
+      );
+      if (!creditsResponse.ok) return null;
+
+      const credits = await creditsResponse.json();
+      const cast = (credits.cast || []).slice(0, CONFIG.MAX_CAST).map((actor) => ({
+        name: actor.name,
+        character: actor.character || '',
+        photo: actor.profile_path
+          ? `https://image.tmdb.org/t/p/w185${actor.profile_path}`
+          : null,
+      }));
+
+      photoCache.set(cacheKey, cast);
+      return cast;
+    } catch {
+      return null;
+    }
+  }
+
+  async function wikipediaSummaryPhoto(pageTitle, controller) {
+    const encoded = encodeURIComponent(String(pageTitle).replace(/ /g, '_'));
+    const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`, {
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.thumbnail?.source || null;
+  }
+
+  async function wikipediaSearchPhoto(query, controller) {
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=3&format=json&origin=*`;
+    const response = await fetch(searchUrl, { signal: controller.signal });
+    if (!response.ok) return null;
+
+    const searchData = await response.json();
+    const hits = searchData.query?.search || [];
+    for (const hit of hits) {
+      const photo = await wikipediaSummaryPhoto(hit.title, controller);
+      if (photo) return photo;
+    }
+    return null;
+  }
+
+  async function fetchWikipediaPhoto(name) {
+    const cacheKey = `wiki:${name}`;
+    if (photoCache.has(cacheKey)) return photoCache.get(cacheKey);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+
+    try {
+      let photo = await wikipediaSummaryPhoto(name.trim().replace(/ /g, '_'), controller);
+      if (!photo) {
+        photo = await wikipediaSearchPhoto(name, controller);
+      }
+      photoCache.set(cacheKey, photo);
+      return photo;
+    } catch {
+      photoCache.set(cacheKey, null);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function fetchActorPhoto(name, filmTitle) {
+    const cacheKey = `actor:${normalizeTitle(name)}`;
+    if (photoCache.has(cacheKey)) return photoCache.get(cacheKey);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4500);
+
+    try {
+      let photo = await wikipediaSummaryPhoto(name.trim().replace(/ /g, '_'), controller);
+      if (photo) {
+        photoCache.set(cacheKey, photo);
+        return photo;
+      }
+
+      const queries = [
+        `${name} (actor)`,
+        `${name} actor`,
+        name,
+      ];
+      if (filmTitle) queries.unshift(`${name} ${filmTitle}`);
+
+      for (const query of queries) {
+        const photo = await wikipediaSearchPhoto(query, controller);
+        if (photo) {
+          photoCache.set(cacheKey, photo);
+          return photo;
+        }
+      }
+
+      photoCache.set(cacheKey, null);
+      return null;
+    } catch {
+      photoCache.set(cacheKey, null);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function enrichCast(meta, type) {
+    const imdbId = meta.imdb_id || (String(meta.id || '').startsWith('tt') ? meta.id : null);
+    const apiKey = await getTmdbApiKey();
+    const baseCast = getCast(meta).slice(0, CONFIG.MAX_CAST);
+    const photoByName = new Map();
+
+    if (apiKey && imdbId) {
+      const tmdbCast = await fetchTmdbCast(imdbId, type, apiKey);
+      if (tmdbCast?.length) {
+        for (const actor of tmdbCast) {
+          if (actor.photo) {
+            photoByName.set(normalizeTitle(actor.name), actor.photo);
+          }
+        }
+      }
+    }
+
+    const filmTitle = meta.name || '';
+    const enriched = [];
+    for (const actor of baseCast) {
+      let photo = actor.photo || photoByName.get(normalizeTitle(actor.name)) || null;
+      if (!photo) {
+        photo = await fetchActorPhoto(actor.name, filmTitle);
+      }
+      enriched.push({ ...actor, photo });
+    }
+
+    meta.enrichedCast = enriched;
+    return enriched;
+  }
+
+  function appendPersonPhoto(container, photo, altText) {
+    if (photo) {
+      const img = document.createElement('img');
+      img.src = photo;
+      img.alt = altText;
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.onerror = () => {
+        img.replaceWith(createPhotoPlaceholder());
+      };
+      container.appendChild(img);
+      return;
+    }
+
+    container.appendChild(createPhotoPlaceholder());
+  }
+
+  function createPhotoPlaceholder() {
+    const placeholder = document.createElement('div');
+    placeholder.style.cssText =
+      'width:2.4rem;height:2.4rem;border-radius:50%;background:rgba(255,255,255,0.08);';
+    return placeholder;
+  }
+
+  function buildMetaLine(meta, type) {
+    const parts = [];
+    if (meta.releaseInfo) parts.push(meta.releaseInfo);
+    if (meta.year) parts.push(String(meta.year));
+    if (type === 'series' && Array.isArray(meta.videos) && meta.videos.length) {
+      parts.push(`${meta.videos.length} Episodes`);
+    }
+    if (meta.runtime) parts.push(meta.runtime);
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  function createSection(label, contentEl) {
+    const section = document.createElement('div');
+    section.className = 'meta-hover-panel-section';
+    const labelEl = document.createElement('div');
+    labelEl.className = 'meta-hover-panel-label';
+    labelEl.textContent = label;
+    section.append(labelEl, contentEl);
+    return section;
+  }
+
+  function renderPanel(meta, type) {
+    const panel = document.createElement('div');
+    panel.className = 'meta-hover-panel';
+    panel.id = 'meta-hover-panel-active';
+
+    const header = document.createElement('div');
+    header.className = 'meta-hover-panel-header';
+
+    const title = document.createElement('div');
+    title.className = 'meta-hover-panel-title';
+    title.textContent = meta.name || 'Unbekannt';
+
+    const metaLine = document.createElement('div');
+    metaLine.className = 'meta-hover-panel-meta';
+    const info = buildMetaLine(meta, type);
+    if (info) {
+      const span = document.createElement('span');
+      span.textContent = info;
+      metaLine.appendChild(span);
+    }
+    if (meta.imdbRating) {
+      const imdb = document.createElement('span');
+      imdb.className = 'meta-hover-panel-imdb';
+      imdb.textContent = 'IMDb';
+      const rating = document.createElement('span');
+      rating.className = 'meta-hover-panel-rating';
+      rating.textContent = meta.imdbRating;
+      metaLine.append(imdb, rating);
+    }
+
+    header.append(title, metaLine);
+    panel.appendChild(header);
+
+    const genres = getGenres(meta).slice(0, CONFIG.MAX_GENRES);
+    if (genres.length) {
+      const tags = document.createElement('div');
+      tags.className = 'meta-hover-panel-tags';
+      genres.forEach((genre) => {
+        const tag = document.createElement('span');
+        tag.className = 'meta-hover-panel-tag';
+        tag.textContent = genre;
+        tags.appendChild(tag);
+      });
+      panel.appendChild(createSection('Tags', tags));
+    }
+
+    if (meta.description) {
+      const plot = document.createElement('div');
+      plot.className = 'meta-hover-panel-plot';
+      plot.textContent = meta.description;
+      panel.appendChild(createSection('Plot', plot));
+    }
+
+    const director = getDirector(meta);
+    if (director) {
+      const person = document.createElement('div');
+      person.className = 'meta-hover-panel-person';
+      appendPersonPhoto(person, meta.directorPhoto || null, director);
+      const text = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'meta-hover-panel-person-name';
+      name.textContent = director;
+      text.appendChild(name);
+      person.appendChild(text);
+      panel.appendChild(createSection('Director', person));
+    }
+
+    const cast = getCast(meta);
+    if (cast.length) {
+      const grid = document.createElement('div');
+      grid.className = 'meta-hover-panel-cast-grid';
+      cast.forEach((actor) => {
+        const item = document.createElement('div');
+        item.className = 'meta-hover-panel-person';
+        appendPersonPhoto(item, actor.photo, actor.name);
+        const text = document.createElement('div');
+        const name = document.createElement('div');
+        name.className = 'meta-hover-panel-person-name';
+        name.textContent = actor.name;
+        text.appendChild(name);
+        if (actor.character) {
+          const role = document.createElement('div');
+          role.className = 'meta-hover-panel-person-role';
+          role.textContent = actor.character;
+          text.appendChild(role);
+        }
+        item.appendChild(text);
+        grid.appendChild(item);
+      });
+      panel.appendChild(createSection('Cast', grid));
+    }
+
+    return panel;
+  }
+
+  function positionPanel(panel, anchorRect) {
+    const padding = 12;
+    let left = anchorRect.right + padding;
+    let top = anchorRect.top;
+
+    if (left + CONFIG.PANEL_WIDTH > window.innerWidth - padding) {
+      left = anchorRect.left - CONFIG.PANEL_WIDTH - padding;
+    }
+    if (left < padding) {
+      left = Math.max(padding, anchorRect.left + anchorRect.width / 2 - CONFIG.PANEL_WIDTH / 2);
+    }
+
+    top = Math.max(padding, Math.min(top, window.innerHeight - panel.offsetHeight - padding));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+  }
+
+  function removePanel() {
+    if (activePanel) {
+      activePanel.remove();
+      activePanel = null;
+    }
+    activeAnchor = null;
+    document.querySelectorAll('#meta-hover-panel-active').forEach((node) => node.remove());
+  }
+
+  function isAnchorVisible(anchor) {
+    if (!anchor?.isConnected) return false;
+    const rect = anchor.getBoundingClientRect();
+    return (
+      rect.bottom > 0 &&
+      rect.top < window.innerHeight &&
+      rect.right > 0 &&
+      rect.left < window.innerWidth
+    );
+  }
+
+  function isHoverIntentActive(anchor) {
+    return Boolean(anchor?.isConnected && trackedAnchor === anchor);
+  }
+
+  function isPointerOverAnchor(anchor, x, y) {
+    if (!anchor?.isConnected) return false;
+    const rect = anchor.getBoundingClientRect();
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }
+
+  function validateActivePanel(pointer) {
+    if (!activePanel) return;
+
+    if (!activeAnchor?.isConnected || !isAnchorVisible(activeAnchor)) {
+      clearHoverState();
+      return;
+    }
+
+    if (!isHoverIntentActive(activeAnchor)) {
+      clearHoverState();
+      return;
+    }
+
+    if (pointer && !isPointerOverAnchor(activeAnchor, pointer.x, pointer.y)) {
+      const anchorUnderPointer = getMetaItemAnchor(
+        document.elementFromPoint(pointer.x, pointer.y)
+      );
+      if (anchorUnderPointer !== activeAnchor) {
+        clearHoverState();
+      }
+    }
+  }
+
+  async function showPanel(anchor, media) {
+    const generation = ++showGeneration;
+    const stillValid = () => generation === showGeneration && isHoverIntentActive(anchor);
+
+    removePanel();
+    if (!stillValid()) return;
+
+    activeAnchor = anchor;
+
+    const loading = document.createElement('div');
+    loading.className = 'meta-hover-panel visible';
+    loading.id = 'meta-hover-panel-active';
+    loading.innerHTML = '<div class="meta-hover-panel-loading">Lade Infos…</div>';
+    document.body.appendChild(loading);
+    positionPanel(loading, anchor.getBoundingClientRect());
+    activePanel = loading;
+
+    const imdbId = await resolveImdbId(media);
+    if (!imdbId || !stillValid()) {
+      removePanel();
+      return;
+    }
+
+    const result = await fetchMetaWithFallback(media.type, imdbId);
+    if (!result || !stillValid()) {
+      removePanel();
+      return;
+    }
+
+    const { meta, type: resolvedType } = result;
+    await enrichCast(meta, resolvedType);
+    if (!stillValid()) {
+      removePanel();
+      return;
+    }
+
+    const director = getDirector(meta);
+    if (director && !meta.directorPhoto) {
+      meta.directorPhoto = await fetchWikipediaPhoto(director);
+    }
+    if (!stillValid()) {
+      removePanel();
+      return;
+    }
+
+    const panel = renderPanel(meta, resolvedType);
+    panel.classList.add('visible');
+    document.body.appendChild(panel);
+    loading.remove();
+    activePanel = panel;
+    positionPanel(panel, anchor.getBoundingClientRect());
+  }
+
+  function getMetaItemAnchor(target) {
+    if (!(target instanceof Element)) return null;
+
+    const direct = target.closest('[class*="meta-item-container"]');
+    if (direct) return direct;
+
+    const card = target.closest('[class*="meta-items-container"] > [class*="meta-item"]');
+    if (card) {
+      return card.querySelector('[class*="meta-item-container"]');
+    }
+
+    return null;
+  }
+
+  function clearHoverState() {
+    showGeneration += 1;
+    clearTimeout(hoverTimer);
+    hoverTimer = null;
+    trackedAnchor = null;
+    removePanel();
+  }
+
+  function scheduleHover(anchor) {
+    if (!anchor || trackedAnchor === anchor) return;
+    trackedAnchor = anchor;
+    clearTimeout(hoverTimer);
+
+    hoverTimer = setTimeout(async () => {
+      if (!isHoverIntentActive(anchor)) return;
+      const media = await extractMediaInfo(anchor);
+      if (!media || !isHoverIntentActive(anchor)) return;
+      showPanel(anchor, media);
+    }, CONFIG.HOVER_DELAY);
+  }
+
+  function handlePointerMove(event) {
+    if (moveRaf) return;
+    moveRaf = requestAnimationFrame(() => {
+      moveRaf = null;
+      const anchor = getMetaItemAnchor(document.elementFromPoint(event.clientX, event.clientY));
+      if (!anchor) {
+        clearHoverState();
+        return;
+      }
+
+      validateActivePanel({ x: event.clientX, y: event.clientY });
+
+      if (activePanel && activeAnchor === anchor) {
+        repositionActivePanel();
+        return;
+      }
+
+      scheduleHover(anchor);
+    });
+  }
+
+  function handleScroll() {
+    if (!activePanel) return;
+    if (!activeAnchor?.isConnected || !isAnchorVisible(activeAnchor)) {
+      clearHoverState();
+      return;
+    }
+    repositionActivePanel();
+  }
+
+  function repositionActivePanel() {
+    if (!activePanel || !activeAnchor) return;
+    positionPanel(activePanel, activeAnchor.getBoundingClientRect());
+  }
+
+  function init() {
+    if (window.__MetaHoverPanelLoaded) return;
+    window.__MetaHoverPanelLoaded = true;
+
+    injectStyles();
+    annotateMetaItems();
+
+    document.addEventListener('mousemove', handlePointerMove, { passive: true });
+    document.addEventListener('mouseleave', clearHoverState);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', () => {
+      if (!activePanel) return;
+      if (!activeAnchor?.isConnected || !isAnchorVisible(activeAnchor)) {
+        clearHoverState();
+        return;
+      }
+      repositionActivePanel();
+    });
+    window.addEventListener('hashchange', clearHoverState);
+    window.addEventListener('blur', clearHoverState);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) clearHoverState();
+    });
+
+    const observer = new MutationObserver(() => annotateMetaItems());
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.info('[MetaHoverPanel] Ready');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    setTimeout(init, 400);
+  }
+})();

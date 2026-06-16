@@ -1,9 +1,8 @@
-# Copies plugins and themes from mystremio into the shell release folder.
-# Release builds use -SkipAppData so personal AppData settings are never bundled.
+# Copies plugins and themes from project sources into the shell release folder.
+# No local AppData fallback is allowed for release safety.
 param(
     [string]$SourceRoot = "",
-    [string]$ReleaseDir = (Join-Path $PSScriptRoot "..\target\x86_64-pc-windows-msvc\release"),
-    [switch]$SkipAppData
+    [string]$ReleaseDir = (Join-Path $PSScriptRoot "..\target\x86_64-pc-windows-msvc\release")
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,36 +25,11 @@ $ReleaseDir = [System.IO.Path]::GetFullPath($ReleaseDir)
 $PluginSource = if ($SourceRoot) { Join-Path $SourceRoot "plugins" } else { "" }
 $ThemeSource = if ($SourceRoot) { Join-Path $SourceRoot "themes" } else { "" }
 $PluginTargets = @(
-    (Join-Path $ReleaseDir "plugins"),
-    (Join-Path $env:APPDATA "MyStremio\plugins")
+    (Join-Path $ReleaseDir "plugins")
 )
 $ThemeTargets = @(
-    (Join-Path $ReleaseDir "themes"),
-    (Join-Path $env:APPDATA "MyStremio\themes")
+    (Join-Path $ReleaseDir "themes")
 )
-
-function Resolve-FallbackSource {
-    param(
-        [string]$Kind,
-        [string]$ReleaseDir
-    )
-    $candidates = @(
-        (Join-Path $env:APPDATA "MyStremio\$Kind"),
-        (Join-Path (Join-Path $PSScriptRoot "..") $Kind),
-        (Join-Path $ReleaseDir $Kind),
-        (Join-Path $env:USERPROFILE "Downloads\StremioCustom-v2.0.0-win64\$Kind"),
-        (Join-Path $env:USERPROFILE "Downloads\MyStremio-v2.1.0-win64\$Kind")
-    )
-    foreach ($candidate in $candidates) {
-        if (Test-Path $candidate) {
-            $hasFiles = (Get-ChildItem -Path $candidate -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
-            if ($hasFiles) {
-                return [System.IO.Path]::GetFullPath($candidate)
-            }
-        }
-    }
-    return $null
-}
 
 function Copy-TreeIfExists {
     param(
@@ -373,26 +347,13 @@ function Patch-LiquidGlassTheme {
 }
 
 if (-not $PluginSource -or -not (Test-Path $PluginSource)) {
-    $fallback = Resolve-FallbackSource -Kind "plugins" -ReleaseDir $ReleaseDir
-    if ($fallback) {
-        Write-Warning "Plugin source not found at '$PluginSource'. Using fallback '$fallback'."
-        $PluginSource = $fallback
-    } else {
-        throw "Plugin source not found: $PluginSource"
-    }
+    throw "Plugin source not found. Set -SourceRoot to a project folder containing 'plugins'. Current: $PluginSource"
 }
 if (-not $ThemeSource -or -not (Test-Path $ThemeSource)) {
-    $fallback = Resolve-FallbackSource -Kind "themes" -ReleaseDir $ReleaseDir
-    if ($fallback) {
-        Write-Warning "Theme source not found at '$ThemeSource'. Using fallback '$fallback'."
-        $ThemeSource = $fallback
-    } else {
-        throw "Theme source not found: $ThemeSource"
-    }
+    throw "Theme source not found. Set -SourceRoot to a project folder containing 'themes'. Current: $ThemeSource"
 }
 
 foreach ($target in $PluginTargets) {
-    if ($SkipAppData -and $target -like "$env:APPDATA*") { continue }
     Copy-TreeIfExists -Source $PluginSource -Destination $target
     Ensure-StreamUiSchema -PluginsDir $target
     Patch-StreamUiPlugin -PluginsDir $target
@@ -406,7 +367,6 @@ foreach ($target in $PluginTargets) {
 }
 
 foreach ($target in $ThemeTargets) {
-    if ($SkipAppData -and $target -like "$env:APPDATA*") { continue }
     Copy-TreeIfExists -Source $ThemeSource -Destination $target
     Patch-LiquidGlassTheme -ThemesDir $target
 }
@@ -414,7 +374,6 @@ foreach ($target in $ThemeTargets) {
 for ($i = 0; $i -lt $PluginTargets.Count; $i++) {
     $pluginTarget = $PluginTargets[$i]
     $themeTarget = $ThemeTargets[$i]
-    if ($SkipAppData -and $pluginTarget -like "$env:APPDATA*") { continue }
     Remove-DeprecatedAssets -PluginsDir $pluginTarget -ThemesDir $themeTarget
 }
 
