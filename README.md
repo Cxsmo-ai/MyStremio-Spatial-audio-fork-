@@ -9,7 +9,7 @@ It combines UI upgrades, player improvements, plugins/themes, library tools, and
 
 ## How MyStremio differs from official Stremio
 
-- Built-in UI and navigation enhancements (including a Glass-style look and a custom settings area)
+- Built-in UI and navigation enhancements (including a Glass-Theme and a custom settings area)
 - Improved player tooling (hover timestamp, TheIntroDB/auto-skip options, controllable preload behavior)
 - Better stream organization and metadata presentation (enrichment panels and cleaner stream UI behavior)
 - Integrated Cinebye management (manage addons, optional Cinemeta disable)
@@ -21,29 +21,29 @@ It combines UI upgrades, player improvements, plugins/themes, library tools, and
 
 ## Features with screenshots
 
-### 1) Cinebye Addon Manager
+### 1) Board hero home view
 
-Cinebye is integrated so you can manage addons in one place and optionally disable specific sources (for example Cinemeta).
+The board offers a modern hero section made by [Fxy6969] (https://github.com/Fxy6969).
 
-![Cinebye Addon Manager](./images/01-cinebye-addon-manager.png)
+![Board Hero Home](./images/03-board-hero-home.png)
 
-### 2) Detail view with metadata and stream sidebar
+### 2) Hover metadata in catalogs
+
+While browsing catalogs, hover cards show key information (plot, genres, cast) without forcing a page change.
+
+![Catalog Hover Metadata](./images/06-catalog-hover-metadata.png)
+
+### 3) Detail view with metadata and stream sidebar
 
 The detail page combines metadata, cast, similar titles, and an extended stream/provider sidebar in one view.
 
 ![Metadata and Stream UI](./images/02-detail-metadata-stream-sidebar.png)
 
-### 3) Board hero home view
+### 4) Cinebye Addon Manager
 
-The board offers a modern hero section, quick actions, and direct access to Continue Watching.
+[Cinebye] (https://cinebye.elfhosted.com/) is integrated so you can manage addons inside Stremio and optionally disable specific sources (for example Cinemeta).
 
-![Board Hero Home](./images/03-board-hero-home.png)
-
-### 4) Settings: preload, library backup, Discord
-
-Inside **Settings -> MyStremio**, you get central controls for buffer/preload, library export/import, and Discord Rich Presence.
-
-![Preload Library Discord Settings](./images/04-settings-preload-library-discord.png)
+![Cinebye Addon Manager](./images/01-cinebye-addon-manager.png)
 
 ### 5) Settings: themes and plugins
 
@@ -51,11 +51,15 @@ Themes and plugins can be managed directly from settings, including quick access
 
 ![Themes and Plugins Settings](./images/05-settings-themes-plugins.png)
 
-### 6) Hover metadata in catalogs
+### 6) Settings: preload, library backup, Discord
 
-While browsing catalogs, hover cards show key information (plot, genres, cast) without forcing a page change.
+Inside **Settings -> MyStremio**, you get central controls for buffer/preload, library export/import, and Discord Rich Presence.
 
-![Catalog Hover Metadata](./images/06-catalog-hover-metadata.png)
+![Preload Library Discord Settings](./images/04-settings-preload-library-discord.png)
+
+
+
+
 
 ---
 
@@ -91,32 +95,24 @@ Optionally delete `%APPDATA%\MyStremio\` to remove all local user data.
 ## First-time setup
 
 1. Install and launch MyStremio.
-2. Sign in with your Stremio account (or continue as guest).
-3. Install your preferred addons.
-4. Open **Settings -> MyStremio** and configure optional items:
+2. Sign in with your Stremio account.
+3. Open **Settings -> MyStremio** and configure optional items:
    - Preload/buffer
    - Themes/plugins
    - Discord Rich Presence
    - Plugin API keys
-5. Create library folders and use JSON import/export when needed.
+4. Create library folders and use JSON import/export when needed.
 
 ---
 
 ## Themes and plugins (manual files)
 
-### Install a theme
+### Install themes/plugins
 
 1. Open **Settings -> MyStremio**.
-2. Click **Open themes folder**.
-3. Place your theme files in that folder.
-4. Restart the app and select the theme.
-
-### Install a plugin
-
-1. Open **Settings -> MyStremio**.
-2. Click **Open plugins folder**.
-3. Place your plugin files in that folder.
-4. Restart (or reload) the app, then enable the plugin.
+2. Click **Open themes/plugins folder**.
+3. Place your theme/plugin files in that folder.
+4. Toggle the switch and press CTRL+R to reload the app.
 
 ---
 
@@ -149,12 +145,13 @@ Optional for a clean GitHub-ready package:
 
 ## Credits
 
-MyStremio is heavily inspired by:
+MyStremio is based on the following independent communtiy projects:
 
 - [REVENGE977/stremio-enhanced](https://github.com/REVENGE977/stremio-enhanced)
+- [Fxy6969/Stremio-Glass-Theme] (https://github.com/Fxy6969/Stremio-Glass-Theme)
 - [Bo0ii/StreamGo](https://github.com/Bo0ii/StreamGo)
 
-Both projects were important inspiration, while MyStremio is implemented and packaged as its own custom build.
+These projects were important inspiration, and I used many of their features for my own custom build.
 
 ---
 
