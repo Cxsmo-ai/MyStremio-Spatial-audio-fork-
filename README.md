@@ -1,114 +1,137 @@
 # MyStremio
 
-**MyStremio** is a customized Windows desktop client based on the Stremio shell. It bundles enhanced playback, interface tweaks, library collections, Discord Rich Presence, and many plugins — all in one installer.
+**MyStremio** is a personalized Windows desktop client built on the Stremio shell stack.
+It combines UI upgrades, player improvements, plugins/themes, library tools, and Discord Rich Presence in one installer.
 
-> **Disclaimer:** MyStremio is an independent community project. It is not affiliated with or endorsed by Stremio AG.
+> **Disclaimer:** MyStremio is an independent community project and is not affiliated with Stremio AG.
+
+---
+
+## How MyStremio differs from official Stremio
+
+- Built-in UI and navigation enhancements (including a Glass-style look and a custom settings area)
+- Improved player tooling (hover timestamp, TheIntroDB/auto-skip options, controllable preload behavior)
+- Better stream organization and metadata presentation (enrichment panels and cleaner stream UI behavior)
+- Integrated Cinebye management (manage addons, optional Cinemeta disable)
+- Custom library groups with JSON import/export
+- Additional power-user options such as plugin/theme toggles and Discord Rich Presence
+- Packaged as a ready-to-use single installer
+
+---
+
+## Features with screenshots
+
+### 1) Cinebye Addon Manager
+
+Cinebye is integrated so you can manage addons in one place and optionally disable specific sources (for example Cinemeta).
+
+![Cinebye Addon Manager](./images/01-cinebye-addon-manager.png)
+
+### 2) Detail view with metadata and stream sidebar
+
+The detail page combines metadata, cast, similar titles, and an extended stream/provider sidebar in one view.
+
+![Metadata and Stream UI](./images/02-detail-metadata-stream-sidebar.png)
+
+### 3) Board hero home view
+
+The board offers a modern hero section, quick actions, and direct access to Continue Watching.
+
+![Board Hero Home](./images/03-board-hero-home.png)
+
+### 4) Settings: preload, library backup, Discord
+
+Inside **Settings -> MyStremio**, you get central controls for buffer/preload, library export/import, and Discord Rich Presence.
+
+![Preload Library Discord Settings](./images/04-settings-preload-library-discord.png)
+
+### 5) Settings: themes and plugins
+
+Themes and plugins can be managed directly from settings, including quick access to the themes/plugins folders.
+
+![Themes and Plugins Settings](./images/05-settings-themes-plugins.png)
+
+### 6) Hover metadata in catalogs
+
+While browsing catalogs, hover cards show key information (plot, genres, cast) without forcing a page change.
+
+![Catalog Hover Metadata](./images/06-catalog-hover-metadata.png)
 
 ---
 
 ## Installation
 
-You only need **one file** — just like the official Stremio installer.
-
-1. Open the [GitHub Releases](https://github.com/YOUR_USERNAME/MyStremio/releases) page.
-2. Download **`MyStremioSetup-v2.1.3_x64.exe`** (or the latest version).
-3. Run the installer. It installs everything automatically:
-   - Application binaries (`mystremio-shell.exe`, streaming server, FFmpeg, libmpv)
+1. Download the latest installer from this repository's **Releases** page.
+2. Run `MyStremioSetup-..._x64.exe`.
+3. The installer sets up:
+   - App binaries (`mystremio-shell.exe`, streaming server, FFmpeg, libmpv)
    - Bundled plugins and themes
-   - WebView2 runtime (installed automatically if missing)
+   - WebView2 runtime (if missing)
    - Protocol handlers (`stremio://`, `magnet:`, optional `.torrent`)
-4. Launch **MyStremio** from the Start menu or desktop shortcut.
+4. Launch MyStremio from the Start menu or desktop shortcut.
 
-### Install location
+### Install paths
 
-| What | Path |
-|------|------|
-| Application | `%LOCALAPPDATA%\Programs\MyStremio\` |
-| User settings & addons | `%APPDATA%\MyStremio\` |
-
-No portable ZIP or extra downloads are required. The installer is fully self-contained.
+- App: `%LOCALAPPDATA%\Programs\MyStremio\`
+- User data (settings/addons): `%APPDATA%\MyStremio\`
 
 ### Requirements
 
 - Windows 10/11 (64-bit)
-- Internet connection (for Stremio web UI and addons)
-- Optional: API keys for enrichment plugins (TMDB, TheIntroDB, etc.) — configure after install in **Settings → MyStremio**
+- Internet connection (web UI, addons, metadata sources)
+- Optional API keys for plugins (for example TMDB, TheIntroDB)
 
 ### Uninstall
 
-Use **Settings → Apps → MyStremio** or the uninstaller from the Start menu. You can optionally delete `%APPDATA%\MyStremio\` to remove all personal data.
-
----
-
-## What MyStremio adds on top of Stremio
-
-### Playback pipeline upgrades
-
-| MyStremio addition | Why it matters |
-|--------------------|----------------|
-| **Custom MPV preload control** | Stable buffering with user-controlled preload behavior |
-| **Seek buffer + hover timestamp** | More precise seeking and clearer scrub feedback |
-| **Stream cache coordination** | Faster stream resume/re-selection and fewer loading stalls |
-| **Persistent language quick-select** | Audio/subtitle language preferences survive restarts |
-| **Custom subtitle sync + style layer** | Better subtitle timing and readability without breaking playback |
-
-### Stream page enhancements
-
-| MyStremio addition | Why it matters |
-|--------------------|----------------|
-| **Unified Stream UI plugin** | Groups streams into addon accordions with cleaner structure |
-| **Ratings bundle card** | Aggregates IMDb/TMDb/RT/Metacritic data directly in stream view |
-| **WatchHub panel integration** | Streaming provider overview integrated into stream details |
-| **AfterCredits panel** | Post-credit hints visible without addon list clutter |
-| **Quality picker overlay** | Faster best-stream selection by grouped quality tiers |
-
-### Interface and workflow improvements
-
-| MyStremio addition | Why it matters |
-|--------------------|----------------|
-| **Liquid Glass theme + player glass tuning** | Consistent custom visual layer across app and player |
-| **Dynamic Hero + enhanced covers** | More informative home/continue-watching presentation |
-| **Custom settings surface (`Settings -> MyStremio`)** | Central place for all MyStremio-specific controls |
-| **Library folders and collection actions** | Extra organization workflow not available in stock behavior |
-| **Route-aware plugin runtime control** | Non-essential plugins suspend during playback to lower overhead |
-
-### Integrations
-
-| MyStremio addition | Why it matters |
-|--------------------|----------------|
-| **Discord Rich Presence (persistent settings)** | Optional live activity sharing with stable reconnect behavior |
-| **Data Enrichment hardening** | TMDB enrichment with safer mount targeting and helper links (TMDB, RPDB, TheIntroDB) |
-
-### Settings location
-
-Open **Settings** (`#/settings`) → **MyStremio** for app-specific options (Discord, autoskip, themes, plugin configs).
+Use **Windows Apps & Features** or the Start menu uninstaller.
+Optionally delete `%APPDATA%\MyStremio\` to remove all local user data.
 
 ---
 
 ## First-time setup
 
 1. Install and launch MyStremio.
-2. Log in with your Stremio account (or continue as guest).
-3. Install your preferred addons via the addon catalog.
-4. Open **Settings → MyStremio** to configure optional API keys:
-   - **TMDB** — for Data Enrichment (free key at [themoviedb.org](https://www.themoviedb.org/settings/api))
-   - **TheIntroDB** — for intro/credits skip
-5. Create library collections with the **+** button in the library filter bar.
+2. Sign in with your Stremio account (or continue as guest).
+3. Install your preferred addons.
+4. Open **Settings -> MyStremio** and configure optional items:
+   - Preload/buffer
+   - Themes/plugins
+   - Discord Rich Presence
+   - Plugin API keys
+5. Create library folders and use JSON import/export when needed.
 
 ---
 
-## Building from source (developers)
+## Themes and plugins (manual files)
 
-Requires: Rust (MSVC), Visual Studio Build Tools, Inno Setup 6, and Stremio Desktop installed once (for runtime binaries).
+### Install a theme
+
+1. Open **Settings -> MyStremio**.
+2. Click **Open themes folder**.
+3. Place your theme files in that folder.
+4. Restart the app and select the theme.
+
+### Install a plugin
+
+1. Open **Settings -> MyStremio**.
+2. Click **Open plugins folder**.
+3. Place your plugin files in that folder.
+4. Restart (or reload) the app, then enable the plugin.
+
+---
+
+## Build from source (developers)
+
+Requires Rust (MSVC), Visual Studio Build Tools, Inno Setup 6, and an installed Stremio Desktop runtime.
 
 ```powershell
 cd stremio-shell\stremio-shell-ng-main
 .\package-release.ps1
 ```
 
-Output: `release\MyStremioSetup-v2.1.3_x64.exe`
+Output: `release\MyStremioSetup-..._x64.exe`
 
-To assemble a clean GitHub folder from the parent repository:
+Optional for a clean GitHub-ready package:
 
 ```powershell
 .\publish-github.ps1
@@ -116,34 +139,26 @@ To assemble a clean GitHub folder from the parent repository:
 
 ---
 
-## Privacy & data
+## Privacy and local data
 
-- **No API keys or personal settings are bundled** in the installer. Plugin config files ship with empty keys.
-- Your library collections, addon settings, and preferences are stored locally in `%APPDATA%\MyStremio\`.
-- Discord Rich Presence only sends activity when enabled and connected.
-
----
-
-## License & third-party
-
-MyStremio builds on the Stremio shell and includes third-party plugins and themes. See `mystremio/build/THIRD-PARTY-NOTICES.txt` for attributions.
-
-Stremio® is a trademark of Smart Code OOD. This project is a community modification and is not officially supported by Stremio.
+- No API keys or personal settings are prefilled in the installer.
+- Settings, addon data, and library structure are stored locally in `%APPDATA%\MyStremio\`.
+- Discord Rich Presence only sends data when enabled and connected.
 
 ---
 
-## Patch Notes
+## Credits
 
-### 2.1.3
+MyStremio is heavily inspired by:
 
-- Version bump to `2.1.3` across shell/package/release artifacts.
-- Added library backup controls in **Settings -> MyStremio -> Library** with **Export library JSON** and **Import library JSON**.
-- Improved board return behavior: returning from detail view now restores to the exact previously selected title anchor more reliably.
-- WatchHub remains collapsible while keeping the previous panel design/style in the detail sidebar.
-- Fullscreen state handling in the shell/window bridge was refactored and hardened to reduce desync between button state and actual fullscreen mode.
-- Fixed plugin settings input persistence so clearing API key fields is saved correctly instead of being blocked.
-- Removed legacy API-key auto-recovery/migration behavior in Data Enrichment so deleted keys stay deleted.
-- Security hardening for release assets: default plugin config keys are empty and no secrets are bundled.
-- Added strict build-time secret guard (`Assert-NoPluginConfigSecrets`) to fail the build if non-empty API keys are detected in plugin JSON files.
-- Cleaned dead bootstrap/runtime code paths to reduce release complexity.
-- Kept installer update behavior compatible with in-app user config persistence in `%APPDATA%`.
+- [REVENGE977/stremio-enhanced](https://github.com/REVENGE977/stremio-enhanced)
+- [Bo0ii/StreamGo](https://github.com/Bo0ii/StreamGo)
+
+Both projects were important inspiration, while MyStremio is implemented and packaged as its own custom build.
+
+---
+
+## Feedback
+
+This started as a fun personal project and is improved iteratively.
+If you find reproducible bugs or have ideas, please share feedback or open an issue.
