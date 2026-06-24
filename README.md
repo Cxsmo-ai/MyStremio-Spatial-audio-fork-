@@ -1,9 +1,9 @@
 # MyStremio
 
 **MyStremio** is a personalized Windows desktop client built on the Stremio shell stack.
-It combines UI upgrades, player improvements, plugins/themes, library tools, and Discord Rich Presence in one installer.
+It combines UI upgrades, player improvements, plugins/themes and library tools in one installer.
 
-> **Disclaimer:** MyStremio is an independent community project and is not affiliated with Stremio AG.
+> **Disclaimer:** MyStremio is an independent community project and is not affiliated with official Stremio.
 
 ---
 
@@ -19,7 +19,7 @@ It combines UI upgrades, player improvements, plugins/themes, library tools, and
 
 ---
 
-## Features with screenshots
+## Features
 
 ### 1) Board hero home view
 
