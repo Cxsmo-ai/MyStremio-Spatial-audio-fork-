@@ -25,7 +25,7 @@ Current release: **2.2.0**
 
 ---
 
-### How MyStremio differs from official Stremio
+### ❓ How MyStremio differs from official Stremio
 
 -Improved player tooling (hover timestamp, TheIntroDB/auto-skip options, controllable preload behavior)
 
