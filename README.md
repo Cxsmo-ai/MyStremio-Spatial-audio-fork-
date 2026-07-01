@@ -14,7 +14,7 @@ Current release: **2.2.0**
 
 The board includes a native hero section with rotating featured titles.
 
-![Board Hero Home](./images/01-board-hero-home.png)
+![Board Hero Home](./images/01-board-hero.png)
 
 ### Hover metadata in catalogs
 
