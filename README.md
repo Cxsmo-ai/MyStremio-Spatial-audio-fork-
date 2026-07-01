@@ -9,7 +9,8 @@ Current release: **2.2.0**
 
 ## 📌 Table of Contents
 - [📌 Table of Contents](#-table-of-contents)
-- [❓ What is Stremio Enhanced?](#-Features)
+- [✨ Features](#-Features)
+- [🛠️ Patch Notes](#-Patch-Notes)
 
 
 ---
@@ -80,7 +81,7 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 
 ---
 
-## Patch notes
+## Patch Notes
 
 ### 2.2.0
 
