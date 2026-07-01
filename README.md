@@ -46,7 +46,7 @@ This preference layer is used by the quick language actions shown in the next se
 Quick Select reads your favorites and exposes them as one-click subtitle/audio buttons, so switching language is fast and consistent during playback.
 In short: favorites define what is available, Quick Select is the runtime shortcut layer that applies those preferences immediately.
 
-![Quick Select Language Shortcuts](./images/06-quick-select-language-shortcuts.png)
+![Quick Select Language Shortcuts](./images/06-quick-settings.png)
 
 ### Settings: themes and plugins
 
