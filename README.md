@@ -15,7 +15,7 @@ Current release: **2.2.0**
 
 ---
 
-## Features
+## ✨ Features
 
 ### Board hero home view
 
@@ -81,7 +81,7 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 
 ---
 
-## Patch Notes
+## 🛠️ Patch Notes
 
 ### 2.2.0
 
