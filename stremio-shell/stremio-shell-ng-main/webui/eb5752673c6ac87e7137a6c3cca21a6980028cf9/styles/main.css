@@ -3966,7 +3966,7 @@ kbd {
 
 .hero-row-MReGl {
   margin-top: 0;
-  margin-bottom: 2rem;
+  margin-bottom: 0.25rem;
   position: relative;
 }
 .hero-slot-szdy9 {
@@ -3976,15 +3976,19 @@ kbd {
   margin-left: -50vw;
   margin-right: -50vw;
   width: 100vw;
-  aspect-ratio: 16 / 5;
-  min-height: 900px;
-  max-height: 90vh;
+  aspect-ratio: auto;
+  min-height: 0;
+  height: calc(100vh - var(--mystremio-hero-reserved-below, 22.5rem));
+  max-height: calc(100vh - var(--mystremio-hero-reserved-below, 22.5rem));
   margin-top: 0;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   box-sizing: border-box;
   flex-shrink: 0;
   background-color: #141414;
   overflow: hidden;
+}
+.hero-row-MReGl + [class*="board-row"] {
+  margin-top: 0.5rem;
 }
 .hero-slot-loader-defhU {
   position: absolute;
@@ -4036,7 +4040,7 @@ kbd {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center top;
+  object-position: center 18%;
   opacity: 1 !important;
   transition: opacity 0.35s ease-in-out;
 }
@@ -4053,7 +4057,7 @@ kbd {
   z-index: 3;
   padding-left: 0 !important;
   padding-right: 0 !important;
-  padding-bottom: 60px !important;
+  padding-bottom: 44px !important;
   opacity: 1 !important;
   pointer-events: none;
   transition: opacity 0.35s ease-in-out;
@@ -4080,7 +4084,8 @@ kbd {
 }
 @media only screen and (max-width: 900px) {
   .hero-slot-szdy9 {
-    min-height: 70vh;
+    height: calc(100vh - var(--mystremio-hero-reserved-below, 20rem));
+    max-height: calc(100vh - var(--mystremio-hero-reserved-below, 20rem));
   }
 }
 

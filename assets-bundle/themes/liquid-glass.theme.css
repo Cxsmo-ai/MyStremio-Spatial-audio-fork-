@@ -3614,6 +3614,23 @@ body.ghost-clicking #heroLoadingScreen {
     width: calc(100% + 2rem) !important;
     max-width: none !important;
     box-sizing: border-box !important;
+    aspect-ratio: auto !important;
+    min-height: 0 !important;
+    height: calc(100vh - var(--mystremio-hero-reserved-below, 22.5rem)) !important;
+    max-height: calc(100vh - var(--mystremio-hero-reserved-below, 22.5rem)) !important;
+    margin-bottom: 0 !important;
+}
+
+[class*="hero-row"] {
+    margin-bottom: 0.25rem !important;
+}
+
+[class*="hero-row"] + [class*="board-row"] {
+    margin-top: 0.5rem !important;
+}
+
+[class*="hero-image-"] {
+    object-position: center 18% !important;
 }
 
 #app [class*="board-content-container"] > [class*="board-content"],
