@@ -2,7 +2,7 @@
  * @name TheIntroDB
  * @description Skip intros, recaps, credits, and previews in TV shows and movies in Stremio Enhanced using TheIntroDB API
  * @updateUrl https://raw.githubusercontent.com/TheIntroDB/stremio-enhanced-plugin/refs/heads/main/tidb.plugin.js
- * @version 2.0.0
+ * @version 1.3.5
  * @author TheIntroDB
  */
 /* jshint esversion: 11, browser: true, devel: true */
@@ -11,10 +11,17 @@
 (function() {
 	"use strict";
 
-	const PLUGIN_VERSION = "2.0.0";
+	const PLUGIN_VERSION = "1.3.5";
+	const CONTRIBUTE_TOAST_ID = "tidb-contribute-toast";
 	const PLUGIN_ID = "tidb";
 	const SERVER_URL = "https://api.theintrodb.org/v3";
 	const ACTIVE_BTN_ID = "tidb-active-btn";
+	const CONTRIBUTE_BTN_ID = "tidb-contribute-btn";
+	const CONTRIBUTE_PANEL_ID = "tidb-contribute-panel";
+	const CONTRIBUTE_STYLE_ID = "tidb-contribute-styles";
+	const CONTRIBUTE_BTN_CLASS = "tidb-contribute-control-btn";
+	const CONTRIBUTE_ICON_SIZE = "2.0rem";
+	const CONTRIBUTE_OVERLAY_LOCK_CLASS = "tidb-contribute-overlay-lock";
 	const MAX_RETRIES = 3;
 	const RETRY_DELAY = 2000;
 	const TIDB_API_KEY_SETTING = "tidb_api_key";
@@ -73,7 +80,8 @@
 	const AUTOSKIP_STORAGE_KEYS = {
 		intro: "stremio-custom-autoskip-intro",
 		credits: "stremio-custom-autoskip-credits",
-		recap: "stremio-custom-autoskip-recap"
+		recap: "stremio-custom-autoskip-recap",
+		preview: "stremio-custom-autoskip-preview"
 	};
 
 	function isAutoSkipEnabled(segmentType) {
@@ -95,6 +103,12 @@
 		recap: "Skip Recap",
 		credits: "Skip Credits",
 		preview: "Skip Preview"
+	});
+	const SEGMENT_SUBMIT_LABELS = Object.freeze({
+		intro: "Intro",
+		recap: "Recap",
+		credits: "Credits",
+		preview: "Preview"
 	});
 	const SEGMENT_COLORS = Object.freeze({
 		intro: "rgba(255, 217, 0, 0.6)",
@@ -240,7 +254,242 @@
 	}
 
 	function normalizeApiKey(value) {
-		return typeof value === "string" ? value.trim() : "";
+		const raw = typeof value === "string" ? value.trim() : "";
+		if (!raw) return "";
+
+		let unquoted = raw.replace(/^["']|["']$/g, "");
+		if (/^theintrodb:user_/i.test(unquoted)) {
+			return unquoted;
+		}
+
+		const idbMatch = unquoted.match(/idb_[A-Za-z0-9_-]+/);
+		if (idbMatch) return idbMatch[0];
+
+		return unquoted;
+	}
+
+	function formatApiKeyHint() {
+		return "Copy the full key from theintrodb.org Docs/API (theintrodb:user_…:…). Do not paste only the part after the colon.";
+	}
+
+	function parseSubmissionResponse(responseJson) {
+		if (!responseJson || !Array.isArray(responseJson.submissions)) {
+			return { ok: false, count: 0, statuses: [] };
+		}
+		const submissions = responseJson.submissions;
+		const statuses = submissions.map((entry) => entry.status || entry.state || "unknown");
+		return {
+			ok: submissions.length > 0,
+			count: submissions.length,
+			statuses
+		};
+	}
+
+	function formatSubmissionSuccessMessage(result) {
+		const pending = result.statuses.filter((status) => String(status).toLowerCase() === "pending").length;
+		if (pending > 0) {
+			return `Submitted (${pending} pending). Check Stats on theintrodb.org — it may take a moment to appear.`;
+		}
+		return "Timestamp submitted successfully. Check Stats on theintrodb.org for your submissions.";
+	}
+
+	function extractImdbId(value) {
+		if (!value) return null;
+		const str = String(value);
+		const ttMatch = str.match(/tt\d{7,8}/i);
+		if (ttMatch) return ttMatch[0].toLowerCase();
+		const imdbPrefixMatch = str.match(/\bimdb(\d{7,8})\b/i);
+		if (imdbPrefixMatch) return `tt${imdbPrefixMatch[1]}`;
+		return null;
+	}
+
+	function collectImdbFromMeta(meta, seriesInfo, state) {
+		const candidates = [];
+		if (meta) {
+			candidates.push(meta.imdb_id, meta.imdbId, meta.id);
+			if (Array.isArray(meta.links)) {
+				for (const link of meta.links) {
+					candidates.push(link.url, link.name, link.id);
+				}
+			}
+			if (Array.isArray(meta.extra)) {
+				for (const item of meta.extra) {
+					candidates.push(item.id, item.url, item.name);
+				}
+			}
+		}
+		if (seriesInfo) {
+			candidates.push(seriesInfo.id, seriesInfo.imdb_id, seriesInfo.imdbId);
+		}
+		if (state) {
+			const libraryMeta =
+				state.libraryItem?.content ||
+				state.libraryItem?.state?.meta ||
+				state.libraryItem?.meta;
+			if (libraryMeta) {
+				candidates.push(libraryMeta.id, libraryMeta.imdb_id, libraryMeta.imdbId);
+			}
+			if (state.selected) {
+				candidates.push(state.selected.id, state.selected.imdb_id, state.selected.imdbId);
+			}
+		}
+		for (const candidate of candidates) {
+			const imdbId = extractImdbId(candidate);
+			if (imdbId) return imdbId;
+		}
+		return null;
+	}
+
+	function extractTmdbIdFromCatalogId(value) {
+		if (!value) return null;
+		const str = String(value);
+		const prefixMatch = str.match(/(?:^|:|\/|\\)tmdb:(\d+)/i);
+		if (prefixMatch && isValidTmdbId(prefixMatch[1])) {
+			return Number(prefixMatch[1]);
+		}
+		return null;
+	}
+
+	function readExplicitTmdbId(value) {
+		if (value == null || value === "") return null;
+		if (isValidTmdbId(value)) return Number(value);
+		return extractTmdbIdFromCatalogId(value);
+	}
+
+	function extractTmdbId(value) {
+		return extractTmdbIdFromCatalogId(value);
+	}
+
+	function pickSeriesImdbId(seriesInfo, state) {
+		const candidates = [];
+		if (seriesInfo) {
+			candidates.push(seriesInfo.id, seriesInfo.imdb_id, seriesInfo.imdbId);
+		}
+		if (state) {
+			const libraryMeta =
+				state.libraryItem?.content ||
+				state.libraryItem?.state?.meta ||
+				state.libraryItem?.meta;
+			if (libraryMeta) {
+				candidates.push(libraryMeta.id, libraryMeta.imdb_id, libraryMeta.imdbId);
+			}
+		}
+		for (const candidate of candidates) {
+			const imdbId = extractImdbId(candidate);
+			if (imdbId) return imdbId;
+		}
+		return null;
+	}
+
+	function readTmdbIdField(value) {
+		if (value == null || value === "") return null;
+		return isValidTmdbId(value) ? Number(value) : null;
+	}
+
+	function isPlausibleSeason(value) {
+		const season = Number(value);
+		return Number.isInteger(season) && season >= 1 && season <= 250;
+	}
+
+	function isPlausibleEpisode(value) {
+		const episode = Number(value);
+		return Number.isInteger(episode) && episode >= 1 && episode <= 500;
+	}
+
+	function parseTvEpisodeId(episodeId) {
+		const parts = String(episodeId || "").split(":");
+		if (parts.length < 3) return null;
+
+		if (parts[0].toLowerCase() === "tmdb" && parts.length >= 4) {
+			const tmdbId = readTmdbIdField(parts[1]);
+			const season = Number(parts[2]);
+			const episode = Number(parts[3]);
+			return {
+				idPart: `tmdb:${parts[1]}`,
+				tmdbId,
+				season: isPlausibleSeason(season) ? season : null,
+				episode: isPlausibleEpisode(episode) ? episode : null
+			};
+		}
+
+		const season = Number(parts[1]);
+		const episode = Number(parts[2]);
+		return {
+			idPart: parts[0],
+			tmdbId: extractTmdbIdFromCatalogId(parts[0]),
+			imdbId: extractImdbId(parts[0]),
+			season: isPlausibleSeason(season) ? season : null,
+			episode: isPlausibleEpisode(episode) ? episode : null
+		};
+	}
+
+	function collectTmdbFromMeta(meta, seriesInfo, state, isTv) {
+		const fieldValues = [];
+		const catalogIds = [];
+
+		const pushObject = (obj) => {
+			if (!obj) return;
+			fieldValues.push(obj.tmdb_id, obj.tmdbId);
+			catalogIds.push(obj.id);
+		};
+
+		if (isTv && seriesInfo) {
+			pushObject(seriesInfo);
+		}
+		if (meta) {
+			pushObject(meta);
+			if (Array.isArray(meta.links)) {
+				for (const link of meta.links) {
+					catalogIds.push(link.url, link.name, link.id);
+				}
+			}
+			if (Array.isArray(meta.extra)) {
+				for (const item of meta.extra) {
+					catalogIds.push(item.id, item.url, item.name);
+				}
+			}
+		}
+		if (seriesInfo && !isTv) {
+			pushObject(seriesInfo);
+		}
+		if (state) {
+			const libraryMeta =
+				state.libraryItem?.content ||
+				state.libraryItem?.state?.meta ||
+				state.libraryItem?.meta;
+			pushObject(libraryMeta);
+			pushObject(state.selected);
+		}
+
+		for (const value of fieldValues) {
+			const tmdbId = readTmdbIdField(value);
+			if (tmdbId) return tmdbId;
+		}
+		for (const value of catalogIds) {
+			const tmdbId = extractTmdbIdFromCatalogId(value);
+			if (tmdbId) return tmdbId;
+		}
+		return null;
+	}
+
+	function buildTvEpisodeId(seriesInfo, state, meta) {
+		if (!seriesInfo || seriesInfo.season == null || seriesInfo.episode == null) {
+			return null;
+		}
+		const seriesImdbId = pickSeriesImdbId(seriesInfo, state);
+		const seriesTmdbId = collectTmdbFromMeta(meta, seriesInfo, state, true);
+		const seriesPart =
+			seriesImdbId ||
+			(seriesTmdbId ? `tmdb:${seriesTmdbId}` : null) ||
+			(meta && extractImdbId(meta.id)) ||
+			(meta && extractTmdbIdFromCatalogId(meta.id) ? `tmdb:${extractTmdbIdFromCatalogId(meta.id)}` : null);
+		if (!seriesPart) return null;
+		return `${seriesPart}:${seriesInfo.season}:${seriesInfo.episode}`;
+	}
+
+	function isValidTmdbId(value) {
+		const numeric = Number(value);
+		return Number.isInteger(numeric) && numeric >= 1 && numeric <= 10000000;
 	}
 
 	function normalizeToggleValue(value) {
@@ -256,6 +505,306 @@
 		if (!Number.isFinite(durationSec) || durationSec <= 0) return null;
 		const durationMs = Math.round(durationSec * 1000);
 		return durationMs > 0 ? durationMs : null;
+	}
+
+	function formatClockTime(seconds) {
+		if (seconds == null || !Number.isFinite(seconds)) return "";
+		const total = Math.max(0, Math.round(seconds * 1000) / 1000);
+		const h = Math.floor(total / 3600);
+		const m = Math.floor((total % 3600) / 60);
+		const s = Math.floor(total % 60);
+		if (h > 0) {
+			return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+		}
+		return `${m}:${String(s).padStart(2, "0")}`;
+	}
+
+	function parseTimeInput(value) {
+		const raw = String(value || "").trim();
+		if (!raw) return null;
+		if (/^\d+(\.\d+)?$/.test(raw)) {
+			return Math.max(0, parseFloat(raw));
+		}
+		const parts = raw.split(":").map((part) => Number(part));
+		if (parts.some((part) => !Number.isFinite(part))) return null;
+		if (parts.length === 2) return parts[0] * 60 + parts[1];
+		if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+		return null;
+	}
+
+	function getContributeButtonTemplate() {
+		const container = document.querySelector(
+			'[class*="player-container"] [class*="control-bar-buttons-container"]'
+		);
+		if (!container) return null;
+		return container.querySelector('[class*="control-bar-button"]:not([class*="menu"])');
+	}
+
+	function buildContributeIconSvg(className) {
+		const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+		svg.setAttribute("viewBox", "0 0 24 24");
+		svg.setAttribute("fill", "none");
+		svg.setAttribute("stroke", "currentColor");
+		svg.setAttribute("stroke-width", "1.5");
+		svg.setAttribute("stroke-linecap", "round");
+		svg.setAttribute("stroke-linejoin", "round");
+		svg.setAttribute("aria-hidden", "true");
+		if (className) {
+			svg.setAttribute("class", className);
+		}
+
+		const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+		circle.setAttribute("cx", "12");
+		circle.setAttribute("cy", "12");
+		circle.setAttribute("r", "9");
+		svg.appendChild(circle);
+
+		const handPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+		handPath.setAttribute("d", "M12 7v5l3 2");
+		svg.appendChild(handPath);
+
+		const sparkPath1 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+		sparkPath1.setAttribute("d", "M16 3l2 2");
+		svg.appendChild(sparkPath1);
+
+		const sparkPath2 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+		sparkPath2.setAttribute("d", "M18 5l-2 2");
+		svg.appendChild(sparkPath2);
+
+		return svg;
+	}
+
+	function replaceContributeIcon(button) {
+		const iconWrap = button.querySelector('[class*="icon"]');
+		const refSvg = button.querySelector("svg");
+		const svgClass = refSvg?.getAttribute("class") || "";
+		const svg = buildContributeIconSvg(svgClass);
+
+		if (iconWrap) {
+			iconWrap.replaceChildren(svg);
+			return;
+		}
+		if (refSvg) {
+			refSvg.replaceWith(svg);
+			return;
+		}
+		button.appendChild(svg);
+	}
+
+	function isStaleContributeButton(button) {
+		if (!button) return true;
+		return !button.className.includes("control-bar-button");
+	}
+
+	function injectContributeStyles() {
+		let style = document.getElementById(CONTRIBUTE_STYLE_ID);
+		if (!style) {
+			style = document.createElement("style");
+			style.id = CONTRIBUTE_STYLE_ID;
+			(document.head || document.documentElement).appendChild(style);
+		}
+		style.textContent = `
+			#${CONTRIBUTE_BTN_ID} {
+				display: flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				margin: 0 !important;
+				padding: 0 !important;
+				flex: none !important;
+			}
+			#${CONTRIBUTE_BTN_ID} [class*="button-container"] {
+				display: none !important;
+			}
+			#${CONTRIBUTE_BTN_ID} [class*="icon"],
+			#${CONTRIBUTE_BTN_ID} svg {
+				display: flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				width: ${CONTRIBUTE_ICON_SIZE} !important;
+				height: ${CONTRIBUTE_ICON_SIZE} !important;
+				min-width: ${CONTRIBUTE_ICON_SIZE} !important;
+				min-height: ${CONTRIBUTE_ICON_SIZE} !important;
+				margin: 0 !important;
+				padding: 0 !important;
+				line-height: 0 !important;
+			}
+			#${CONTRIBUTE_BTN_ID} svg {
+				flex: none !important;
+				fill: none !important;
+				stroke: currentColor !important;
+				pointer-events: none !important;
+			}
+			#${CONTRIBUTE_PANEL_ID} {
+				position: fixed;
+				z-index: 2147483000;
+				width: min(22rem, calc(100vw - 2rem));
+				padding: 0.85rem 0.95rem 0.95rem;
+				border-radius: 16px;
+				border: 1px solid rgba(255, 255, 255, 0.14);
+				background: rgba(42, 42, 46, 0.92);
+				backdrop-filter: blur(20px) saturate(180%);
+				-webkit-backdrop-filter: blur(20px) saturate(180%);
+				box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+				color: #fff;
+				font-family: inherit;
+				font-size: 0.82rem;
+				line-height: 1.35;
+				display: none;
+			}
+			#${CONTRIBUTE_PANEL_ID}.open {
+				display: block;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 0.5rem;
+				margin-bottom: 0.65rem;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-title {
+				font-size: 0.9rem;
+				font-weight: 600;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-close {
+				border: none;
+				background: transparent;
+				color: rgba(255, 255, 255, 0.75);
+				font-size: 1.2rem;
+				line-height: 1;
+				cursor: pointer;
+				padding: 0.15rem 0.35rem;
+				border-radius: 8px;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-close:hover {
+				background: rgba(255, 255, 255, 0.1);
+				color: #fff;
+			}
+			#${CONTRIBUTE_PANEL_ID} label {
+				display: block;
+				font-size: 0.72rem;
+				font-weight: 600;
+				color: rgba(255, 255, 255, 0.72);
+				margin-bottom: 0.3rem;
+				text-transform: uppercase;
+				letter-spacing: 0.04em;
+			}
+			#${CONTRIBUTE_PANEL_ID} select,
+			#${CONTRIBUTE_PANEL_ID} input[type="text"] {
+				width: 100%;
+				box-sizing: border-box;
+				border: 1px solid rgba(255, 255, 255, 0.14);
+				border-radius: 10px;
+				background: rgba(0, 0, 0, 0.28);
+				color: #fff;
+				padding: 0.45rem 0.55rem;
+				font-size: 0.84rem;
+				margin-bottom: 0.55rem;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-time-block {
+				display: grid;
+				gap: 0.55rem;
+				margin-bottom: 0.55rem;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-chip-row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.35rem;
+				margin-bottom: 0.15rem;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-chip {
+				border: 1px solid rgba(255, 255, 255, 0.14);
+				background: rgba(255, 255, 255, 0.06);
+				color: #fff;
+				border-radius: 999px;
+				padding: 0.28rem 0.62rem;
+				font-size: 0.74rem;
+				cursor: pointer;
+				transition: background 0.15s ease, border-color 0.15s ease;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-chip:hover {
+				background: rgba(255, 255, 255, 0.14);
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-chip.active {
+				border-color: rgba(255, 255, 255, 0.45);
+				background: rgba(255, 255, 255, 0.2);
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-mark-hint {
+				font-size: 0.72rem;
+				color: rgba(255, 217, 0, 0.9);
+				margin: -0.2rem 0 0.35rem;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-status {
+				font-size: 0.76rem;
+				color: rgba(255, 255, 255, 0.78);
+				margin-bottom: 0.55rem;
+				min-height: 1rem;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-status.error {
+				color: #ff8f8f;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-status.success {
+				color: #9be49b;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-submit {
+				width: 100%;
+				border: none;
+				border-radius: 12px;
+				padding: 0.55rem 0.75rem;
+				font-size: 0.84rem;
+				font-weight: 600;
+				cursor: pointer;
+				color: #fff;
+				background: rgba(255, 255, 255, 0.18);
+				border: 1px solid rgba(255, 255, 255, 0.2);
+				transition: background 0.15s ease;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-submit:hover:not(:disabled) {
+				background: rgba(255, 255, 255, 0.28);
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-submit:disabled {
+				opacity: 0.55;
+				cursor: not-allowed;
+			}
+			html.${CONTRIBUTE_OVERLAY_LOCK_CLASS} [class*="player-container"] {
+				cursor: default !important;
+			}
+			html.${CONTRIBUTE_OVERLAY_LOCK_CLASS} [class*="player-container"] [class*="nav-bar-layer"],
+			html.${CONTRIBUTE_OVERLAY_LOCK_CLASS} [class*="player-container"] [class*="control-bar-layer"],
+			html.${CONTRIBUTE_OVERLAY_LOCK_CLASS} [class*="player-container"] [class*="menu-layer"],
+			html.${CONTRIBUTE_OVERLAY_LOCK_CLASS} [class*="player-container"] [class*="side-drawer-button-layer"],
+			html.${CONTRIBUTE_OVERLAY_LOCK_CLASS} [class*="player-container"] [class*="seek-bar-container"] {
+				opacity: 1 !important;
+				visibility: visible !important;
+				pointer-events: auto !important;
+			}
+			#${CONTRIBUTE_TOAST_ID} {
+				position: fixed;
+				left: 50%;
+				bottom: 5.5rem;
+				transform: translateX(-50%);
+				z-index: 2147483646;
+				max-width: min(28rem, calc(100vw - 2rem));
+				padding: 0.7rem 1rem;
+				border-radius: 12px;
+				border: 1px solid rgba(255, 255, 255, 0.14);
+				background: rgba(28, 28, 32, 0.95);
+				color: #fff;
+				font-size: 0.82rem;
+				line-height: 1.4;
+				box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+				display: none;
+				pointer-events: none;
+			}
+			#${CONTRIBUTE_TOAST_ID}.visible {
+				display: block;
+			}
+			#${CONTRIBUTE_TOAST_ID}.success {
+				border-color: rgba(74, 222, 128, 0.45);
+			}
+			#${CONTRIBUTE_TOAST_ID}.error {
+				border-color: rgba(248, 113, 113, 0.45);
+			}
+		`;
 	}
 
 	class TheIntroDBPlugin {
@@ -286,6 +835,24 @@
 			this._checkTimer = null;
 			this._observer = null;
 			this._autoSkippedKeys = new Set();
+			this._fetchGeneration = 0;
+			this._segmentsLoadedEpisodeId = null;
+			this.mediaImdbId = null;
+			this.seriesImdbId = null;
+			this.playbackSeason = null;
+			this.playbackEpisode = null;
+			this.resolvedTmdbId = null;
+			this.contributePanelOpen = false;
+			this.contributeMarkedStartSec = null;
+			this.contributeSelectedSegment = "intro";
+			this.contributeSubmitting = false;
+			this.contributeOutsideHandler = null;
+			this.contributeKeyHandler = null;
+			this.contributeFormDraft = null;
+			this.contributeResumeOnClose = false;
+			this.contributeOverlayTimer = null;
+			this.contributeToastTimer = null;
+			this.contributeUiWatcher = null;
 			this.init();
 		}
 
@@ -300,9 +867,31 @@
 			this._checkTimer = setInterval(() => this.checkPlaybackChange(), 700);
 			window.addEventListener("hashchange", () => {
 				this._lastSeenUrl = null;
-				setTimeout(() => this.checkPlaybackChange(), 80);
+				setTimeout(() => {
+					this.checkPlaybackChange();
+					this.ensureContributeUi();
+				}, 80);
 			});
 			this.checkPlaybackChange();
+			this.settingsReady.then(() => this.loadSettings()).then(() => {
+				this.ensureContributeUi();
+				this.startContributeUiWatcher();
+			}).catch(() => {});
+		}
+
+		startContributeUiWatcher() {
+			if (this.contributeUiWatcher) return;
+			this.contributeUiWatcher = window.setInterval(() => {
+				if (!this.isOnPlayerRoute()) return;
+				if (!this.userApiKey) return;
+				this.ensureContributeUi();
+			}, 200);
+		}
+
+		stopContributeUiWatcher() {
+			if (!this.contributeUiWatcher) return;
+			window.clearInterval(this.contributeUiWatcher);
+			this.contributeUiWatcher = null;
 		}
 
 		async initializeSettings() {
@@ -320,6 +909,8 @@
 						key: TIDB_API_KEY_SETTING,
 						type: "input",
 						label: "TIDB API Key",
+						description:
+							"Copy your full API key from theintrodb.org Docs/API (format: theintrodb:user_…:…). Required for timestamp submit.",
 						defaultValue: ""
 					},
 					{
@@ -375,6 +966,11 @@
 			return api ? api.getSetting(PLUGIN_ID, key) : Promise.resolve(null);
 		}
 
+		getCrossPluginSetting(pluginId, key) {
+			const api = this.getSettingsApi();
+			return api ? api.getSetting(pluginId, key) : Promise.resolve(null);
+		}
+
 		async loadSettings() {
 			const api = this.getSettingsApi();
 			if (!api) return;
@@ -389,6 +985,9 @@
 				visibility[segmentType] = normalizeToggleValue(await this.getSetting(settingKey));
 			}
 			this.segmentButtonVisibility = visibility;
+			if (this.isOnPlayerRoute()) {
+				this.ensureContributeUi();
+			}
 		}
 
 		track(eventName, props) {
@@ -483,6 +1082,13 @@
 				return;
 			}
 
+			if (!this.episodeId || this._segmentsLoadedEpisodeId !== this.episodeId) {
+				this.removeActiveButton();
+				this.activeSegment = null;
+				this.displayedSegmentType = null;
+				return;
+			}
+
 			this.video = video;
 			const currentTime = this.getPlaybackCurrentTime(video);
 			let seg = this.findActiveSegment(currentTime, duration);
@@ -546,6 +1152,34 @@
 			return headers;
 		}
 
+		async validateApiKey() {
+			if (!this.userApiKey) return false;
+			try {
+				const res = await fetch(`${SERVER_URL}/user/stats`, {
+					headers: {
+						...this.getTidbHeaders(),
+						Accept: "application/json"
+					},
+					credentials: "omit"
+				});
+				return res.ok;
+			} catch (_) {
+				return false;
+			}
+		}
+
+		formatSubmitAuthError(apiMessage) {
+			const message = String(apiMessage || "").trim();
+			if (
+				message.toLowerCase().includes("invalid or expired token") ||
+				message.toLowerCase().includes("invalid api key") ||
+				message.toLowerCase().includes("missing authorization")
+			) {
+				return `${message}. ${formatApiKeyHint()}`;
+			}
+			return message;
+		}
+
 		getVideoSource(video) {
 			return video ? (video.currentSrc || video.src || video.getAttribute("src") || null) : null;
 		}
@@ -561,15 +1195,22 @@
 
 		async resolvePlaybackContext(urlChanged, sourceChanged) {
 			const now = Date.now();
-			const urlEpisodeId = this.extractEpisodeIdFromUrl();
-			const urlContext = urlEpisodeId ? {
-				episodeId: urlEpisodeId,
-				title: this.extractTitleFromDocument()
-			} : null;
+			const routeIds = this.extractIdsFromPlayerRoute();
+			const urlEpisodeId = routeIds && routeIds.episodeId ? routeIds.episodeId : this.extractEpisodeIdFromUrl();
+			const parsedUrl = urlEpisodeId ? parseTvEpisodeId(urlEpisodeId) : null;
+			const urlContext = urlEpisodeId
+				? {
+					episodeId: urlEpisodeId,
+					title: this.extractTitleFromDocument(),
+					imdbId: (routeIds && routeIds.imdbId) || extractImdbId(urlEpisodeId) || parsedUrl?.imdbId || null,
+					season: parsedUrl?.season ?? null,
+					episode: parsedUrl?.episode ?? null
+				}
+				: null;
 
 			const shouldRefreshState = sourceChanged || urlChanged || now - this._lastStateCheckAt > 5000 || !this._lastStateContext;
 			if (!shouldRefreshState && !urlChanged) {
-				return urlContext || this._lastStateContext;
+				return this._lastStateContext || urlContext;
 			}
 
 			if (shouldRefreshState) {
@@ -578,6 +1219,10 @@
 			}
 
 			return this._lastStateContext || urlContext;
+		}
+
+		isOnPlayerRoute() {
+			return /#\/player/.test(window.location.href);
 		}
 
 		async checkPlaybackChange() {
@@ -597,7 +1242,15 @@
 
 				const context = await this.resolvePlaybackContext(urlChanged, sourceChanged);
 				const nextEpisodeId = context && context.episodeId ? context.episodeId : null;
-				if (!nextEpisodeId) return;
+				if (!nextEpisodeId) {
+					if (this.isOnPlayerRoute()) {
+						this.removeActiveButton();
+						this.ensureContributeUi();
+					} else {
+						this.removeContributeUi();
+					}
+					return;
+				}
 
 				const episodeChanged = nextEpisodeId !== this.episodeId;
 				if (!episodeChanged && !videoChanged && !urlChanged) {
@@ -608,6 +1261,7 @@
 					if (!this.segmentWatcher && Object.values(this.segments).flat().length > 0) {
 						this.startSegmentWatcher();
 					}
+					this.ensureContributeUi();
 					return;
 				}
 				if (this.video || this.episodeId) this.cleanup();
@@ -615,6 +1269,11 @@
 				this.video = video;
 				this.episodeId = nextEpisodeId;
 				this.title = context.title || null;
+				this.mediaImdbId = context.imdbId || extractImdbId(nextEpisodeId) || null;
+				this.seriesImdbId = context.seriesImdbId || null;
+				this.playbackSeason = context.season ?? null;
+				this.playbackEpisode = context.episode ?? null;
+				this.resolvedTmdbId = context.tmdbId || null;
 
 				if (!this.onLoadedMetadataHandler) this.onLoadedMetadataHandler = () => this.checkPlaybackChange();
 				this.video.removeEventListener("loadedmetadata", this.onLoadedMetadataHandler);
@@ -626,17 +1285,22 @@
 				console.log(`[TheIntroDB] \nEpisode ID: ${this.episodeId}, \nTitle: ${this.title || "Unknown Title"}`);
 				await this.fetchData();
 				this.attachUiObservers();
+				this.ensureContributeUi();
 			} finally {
 				this._checkingPlayback = false;
 			}
 		}
 
 		extractEpisodeIdFromUrl() {
+			const routeIds = this.extractIdsFromPlayerRoute();
+			if (routeIds && routeIds.episodeId) {
+				return routeIds.episodeId;
+			}
+
 			const url = window.location.href;
 			let m = url.match(/\/detail\/series\/([^/?#]+)\/(\d+)\/(\d+)/);
 			if (m) {
 				const episodeId = `${m[1]}:${m[2]}:${m[3]}`;
-				try { sessionStorage.setItem('stremio-custom-tidb-episode', episodeId); } catch (_) {}
 				return episodeId;
 			}
 			m = url.match(/\/detail\/series\/([^/?#]+)/);
@@ -645,14 +1309,12 @@
 					e = url.match(/[?&]episode=(\d+)/);
 				if (s && e) {
 					const episodeId = `${m[1]}:${s[1]}:${e[1]}`;
-					try { sessionStorage.setItem('stremio-custom-tidb-episode', episodeId); } catch (_) {}
 					return episodeId;
 				}
 			}
 			m = url.match(/\/detail\/movie\/([^/?#]+)/);
 			if (m) {
 				const episodeId = m[1].split(":")[0];
-				try { sessionStorage.setItem('stremio-custom-tidb-episode', episodeId); } catch (_) {}
 				return episodeId;
 			}
 
@@ -664,7 +1326,6 @@
 					const parts = m[1].split(":");
 					if (parts.length >= 3) {
 						const episodeId = `${parts[0]}:${parts[1]}:${parts[2]}`;
-						try { sessionStorage.setItem('stremio-custom-tidb-episode', episodeId); } catch (_) {}
 						return episodeId;
 					}
 				}
@@ -675,53 +1336,255 @@
 						if (!candidate) continue;
 						const imdbMatch = String(candidate).match(/tt\d{7,8}/);
 						if (imdbMatch) {
-							try { sessionStorage.setItem('stremio-custom-tidb-episode', imdbMatch[0]); } catch (_) {}
 							return imdbMatch[0];
 						}
 						const raw = String(candidate).split(":")[0];
 						if (/^\d+$/.test(raw)) {
-							try { sessionStorage.setItem('stremio-custom-tidb-episode', raw); } catch (_) {}
 							return raw;
 						}
 						if (raw) {
-							try { sessionStorage.setItem('stremio-custom-tidb-episode', raw); } catch (_) {}
 							return raw;
 						}
 					}
 				}
 			} catch (_) {}
 
-			if (/#\/player/.test(url)) {
-				try {
-					const cached = sessionStorage.getItem('stremio-custom-tidb-episode');
-					if (cached) return cached;
-				} catch (_) {}
-			}
+			return null;
+		}
 
+		extractIdsFromPlayerRoute() {
+			const sources = [
+				window.location.hash || "",
+				decodeURIComponent(window.location.hash || ""),
+				window.location.href
+			];
+			for (const source of sources) {
+				const tvMatch = source.match(/(tt\d{7,8})[:/](\d{1,3})[:/](\d{1,3})/i);
+				if (tvMatch) {
+					const imdbId = tvMatch[1].toLowerCase();
+					return {
+						episodeId: `${imdbId}:${tvMatch[2]}:${tvMatch[3]}`,
+						imdbId
+					};
+				}
+				const imdbMatch = source.match(/(tt\d{7,8})/i);
+				if (imdbMatch) {
+					const imdbId = imdbMatch[1].toLowerCase();
+					return {
+						episodeId: imdbId,
+						imdbId
+					};
+				}
+			}
 			return null;
 		}
 
 		async getPlaybackContextFromState() {
 			const state = await this.waitForPlayerState();
-			const meta = state && state.metaItem ? state.metaItem.content : null;
+			const meta =
+				state && state.metaItem && state.metaItem.content
+					? state.metaItem.content
+					: state && state.meta
+						? state.meta
+						: state && state.selected && state.selected.meta
+							? state.selected.meta
+							: null;
 			if (!meta || !meta.id) return null;
 
 			const seriesInfo = state.seriesInfo;
-			const id = String(meta.id);
-			const episodeId = seriesInfo && seriesInfo.season && seriesInfo.episode ? `${id}:${seriesInfo.season}:${seriesInfo.episode}` : id;
+			const isTv = seriesInfo && seriesInfo.season != null && seriesInfo.episode != null;
+			const episodeId = isTv
+				? buildTvEpisodeId(seriesInfo, state, meta) || String(meta.id)
+				: String(meta.id);
 
 			let title = meta.name ? String(meta.name) : null;
-			if (title && seriesInfo && seriesInfo.season != null && seriesInfo.episode != null) title = `${title} S${String(seriesInfo.season).padStart(2, "0")}E${String(seriesInfo.episode).padStart(2, "0")}`;
+			if (title && isTv) {
+				title = `${title} S${String(seriesInfo.season).padStart(2, "0")}E${String(seriesInfo.episode).padStart(2, "0")}`;
+			}
+
+			const seriesImdbId = isTv ? pickSeriesImdbId(seriesInfo, state) : null;
+			const imdbId = seriesImdbId || collectImdbFromMeta(meta, seriesInfo, state);
+			const tmdbId = collectTmdbFromMeta(meta, seriesInfo, state, isTv);
+
 			return {
 				episodeId,
-				title
+				title,
+				imdbId,
+				seriesImdbId,
+				tmdbId,
+				season: isTv ? Number(seriesInfo.season) : null,
+				episode: isTv ? Number(seriesInfo.episode) : null
 			};
+		}
+
+		async prepareSubmissionMediaContext(durationMs) {
+			const stateContext = await this.getPlaybackContextFromState();
+			if (stateContext) {
+				if (stateContext.episodeId) this.episodeId = stateContext.episodeId;
+				if (stateContext.imdbId) this.mediaImdbId = stateContext.imdbId;
+				if (stateContext.seriesImdbId) this.seriesImdbId = stateContext.seriesImdbId;
+				if (stateContext.title) this.title = stateContext.title;
+				if (stateContext.season != null) this.playbackSeason = stateContext.season;
+				if (stateContext.episode != null) this.playbackEpisode = stateContext.episode;
+				if (stateContext.tmdbId && isValidTmdbId(stateContext.tmdbId)) {
+					this.resolvedTmdbId = Number(stateContext.tmdbId);
+				}
+			}
+
+			const routeIds = this.extractIdsFromPlayerRoute();
+			if (routeIds && !stateContext) {
+				if (routeIds.imdbId) {
+					this.mediaImdbId = routeIds.imdbId;
+					if (String(this.episodeId || "").split(":").length >= 3) {
+						this.seriesImdbId = routeIds.imdbId;
+					}
+				}
+				if (routeIds.episodeId) {
+					this.episodeId = routeIds.episodeId;
+					const parsedRoute = parseTvEpisodeId(routeIds.episodeId);
+					if (parsedRoute?.season) this.playbackSeason = parsedRoute.season;
+					if (parsedRoute?.episode) this.playbackEpisode = parsedRoute.episode;
+				}
+			} else if (routeIds && stateContext) {
+				if (routeIds.imdbId && !this.seriesImdbId) {
+					this.mediaImdbId = routeIds.imdbId;
+					this.seriesImdbId = routeIds.imdbId;
+				}
+			}
+
+			let media = this.parseMediaContext();
+			if (!media) return null;
+
+			let tmdbId = null;
+			if (media.submissionImdbId || media.imdbId) {
+				tmdbId = await this.fetchTmdbIdFromMediaApi(media, durationMs);
+			}
+			if (!tmdbId) {
+				tmdbId = await this.fetchTmdbIdViaTmdbFind(
+					media.submissionImdbId || media.imdbId,
+					media.type
+				);
+			}
+			if (!tmdbId && media.tmdbId && isValidTmdbId(media.tmdbId)) {
+				const catalogPart = String(this.episodeId || "").split(":")[0];
+				if (extractTmdbIdFromCatalogId(catalogPart)) {
+					tmdbId = Number(media.tmdbId);
+				}
+			}
+			if (tmdbId) {
+				this.resolvedTmdbId = tmdbId;
+				media = this.parseMediaContext();
+			} else {
+				this.resolvedTmdbId = null;
+				media = this.parseMediaContext();
+			}
+
+			return media;
+		}
+
+		async fetchTmdbIdViaTmdbFind(imdbId, type) {
+			if (!imdbId) return null;
+			const api = this.getSettingsApi();
+			const apiKey = api ? await api.getSetting("data-enrichment", "tmdbApiKey") : null;
+			if (!apiKey) return null;
+			try {
+				const res = await fetch(
+					`https://api.themoviedb.org/3/find/${encodeURIComponent(imdbId)}?api_key=${encodeURIComponent(apiKey)}&external_source=imdb_id`,
+					{ credentials: "omit" }
+				);
+				if (!res.ok) return null;
+				const data = await res.json();
+				if (type === "tv" && data.tv_results && data.tv_results[0] && isValidTmdbId(data.tv_results[0].id)) {
+					return Number(data.tv_results[0].id);
+				}
+				if (type === "movie" && data.movie_results && data.movie_results[0] && isValidTmdbId(data.movie_results[0].id)) {
+					return Number(data.movie_results[0].id);
+				}
+				if (data.tv_results && data.tv_results[0] && isValidTmdbId(data.tv_results[0].id)) {
+					return Number(data.tv_results[0].id);
+				}
+				if (data.movie_results && data.movie_results[0] && isValidTmdbId(data.movie_results[0].id)) {
+					return Number(data.movie_results[0].id);
+				}
+			} catch (_) {}
+			return null;
+		}
+
+		parseTmdbIdFromMediaResponse(res) {
+			if (res.status === 204) return null;
+			if (!res.ok) return null;
+			return res
+				.text()
+				.then((text) => {
+					if (!text) return null;
+					try {
+						const json = JSON.parse(text);
+						return isValidTmdbId(json.tmdb_id) ? Number(json.tmdb_id) : null;
+					} catch (_) {
+						return null;
+					}
+				})
+				.catch(() => null);
+		}
+
+		async fetchTmdbIdFromMediaApi(media, durationMs) {
+			if (!media) return null;
+			const queryParams = new URLSearchParams();
+			const lookupImdbId = media.submissionImdbId || media.imdbId;
+			if (lookupImdbId) {
+				queryParams.set("imdb_id", lookupImdbId);
+			} else if (media.tmdbId && isValidTmdbId(media.tmdbId)) {
+				queryParams.set("tmdb_id", String(media.tmdbId));
+			} else {
+				return null;
+			}
+			if (media.type === "tv") {
+				queryParams.set("season", String(media.season));
+				queryParams.set("episode", String(media.episode));
+			}
+
+			const durationAttempts = [];
+			if (durationMs != null) durationAttempts.push(durationMs);
+			durationAttempts.push(null);
+
+			for (const attemptDuration of durationAttempts) {
+				const params = new URLSearchParams(queryParams);
+				if (attemptDuration != null) {
+					params.set("duration_ms", String(attemptDuration));
+				}
+				try {
+					const res = await fetch(`${SERVER_URL}/media?${params}`, {
+						headers: this.getTidbHeaders()
+					});
+					const tmdbId = await this.parseTmdbIdFromMediaResponse(res);
+					if (tmdbId) return tmdbId;
+				} catch (_) {}
+			}
+			return null;
 		}
 
 		async waitForPlayerState() {
 			for (let i = 0; i < 30; i++) {
-				const state = await this.evalInPage("window.services && window.services.core && window.services.core.transport && window.services.core.transport.getState('player')");
-				if (state && state.metaItem && state.metaItem.content) return state;
+				let state = null;
+				if (window.core && typeof window.core.getState === "function") {
+					try {
+						state = await window.core.getState("player");
+					} catch (_) {}
+				}
+				if (!state || !state.metaItem) {
+					state = await this.evalInPage(
+						"window.services && window.services.core && window.services.core.transport && window.services.core.transport.getState('player')"
+					);
+				}
+				const meta =
+					state && state.metaItem && state.metaItem.content
+						? state.metaItem.content
+						: state && state.meta
+							? state.meta
+							: state && state.selected && state.selected.meta
+								? state.selected.meta
+								: null;
+				if (state && meta && meta.id) return state;
 				await new Promise((resolve) => setTimeout(resolve, i < 8 ? 80 : 180));
 			}
 			return null;
@@ -752,22 +1615,33 @@
 				return null;
 			}
 
-			const parts = String(episodeId).split(":");
-			const id = parts[0];
-			const season = parts.length >= 3 ? parts[1] : null;
-			const episode = parts.length >= 3 ? parts[2] : null;
-			const isTvShow = parts.length >= 3;
+			const fetchGeneration = ++this._fetchGeneration;
+			const parsedEpisode = parseTvEpisodeId(episodeId);
+			const id = parsedEpisode?.idPart || String(episodeId).split(":")[0];
+			const season =
+				isPlausibleSeason(this.playbackSeason) ? this.playbackSeason : parsedEpisode?.season;
+			const episode =
+				isPlausibleEpisode(this.playbackEpisode) ? this.playbackEpisode : parsedEpisode?.episode;
+			const isTvShow = isPlausibleSeason(season) && isPlausibleEpisode(episode);
 			for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
 				console.log(`[TheIntroDB] Fetching /media for episode ${episodeId} (attempt ${attempt})`);
 
 				try {
-					const isImdb = id.startsWith("tt");
+					const imdbId =
+						extractImdbId(id) ||
+						this.seriesImdbId ||
+						this.mediaImdbId ||
+						extractImdbId(episodeId);
+					const tmdbFromId = extractTmdbIdFromCatalogId(id);
 					const queryParams = new URLSearchParams();
 
-					if (isImdb) {
-						queryParams.set("imdb_id", id);
+					if (imdbId) {
+						queryParams.set("imdb_id", imdbId);
+					} else if (tmdbFromId) {
+						queryParams.set("tmdb_id", String(tmdbFromId));
 					} else {
-						queryParams.set("tmdb_id", id);
+						console.warn(`[TheIntroDB] No valid IMDB/TMDB id in episodeId: ${episodeId}`);
+						return null;
 					}
 
 					if (isTvShow) {
@@ -784,13 +1658,17 @@
 					});
 
 					if (res.status === 204) {
+						if (fetchGeneration !== this._fetchGeneration || this.episodeId !== episodeId) return null;
 						this.segments = emptySegments();
+						this._segmentsLoadedEpisodeId = episodeId;
 						console.log(`[TheIntroDB] No skip data for episode ${episodeId} (${res.status})`);
 						return null;
 					}
 
 					if (res.status === 404) {
+						if (fetchGeneration !== this._fetchGeneration || this.episodeId !== episodeId) return null;
 						this.segments = emptySegments();
+						this._segmentsLoadedEpisodeId = episodeId;
 						console.warn(`[TheIntroDB] No data found for episode ${episodeId}`);
 						return null;
 					}
@@ -801,6 +1679,15 @@
 					}
 
 					const json = await res.json();
+					if (fetchGeneration !== this._fetchGeneration || this.episodeId !== episodeId) return null;
+
+					if (isValidTmdbId(json.tmdb_id)) {
+						this.resolvedTmdbId = Number(json.tmdb_id);
+					} else if (imdbId) {
+						const resolved = await this.fetchTmdbIdViaTmdbFind(imdbId, isTvShow ? "tv" : "movie");
+						if (resolved) this.resolvedTmdbId = resolved;
+					}
+
 					this.segments = emptySegments();
 
 					for (const segmentType of SEGMENT_TYPES) {
@@ -817,6 +1704,7 @@
 						console.log(`[TheIntroDB] No segment data found for episode ${episodeId}`);
 					}
 
+					this._segmentsLoadedEpisodeId = episodeId;
 					this.waitAndHighlight();
 					this.startSegmentWatcher();
 					this.track("segments_loaded", {
@@ -948,6 +1836,7 @@
 				this.clearVolumeIndicatorHighlights();
 				this.ensureHighlightsPresent();
 				this.syncSkipButton();
+				this.ensureContributeUi();
 			});
 			this.overlayObserver.observe(playerContainer, {
 				attributes: true,
@@ -1002,7 +1891,7 @@
 			Object.assign(skipBtn.style, {
 				position: "fixed",
 				bottom: "140px",
-				right: "max(24px, 8vw)",
+				left: "max(24px, 8vw)",
 				padding: theme.padding,
 				background: theme.background,
 				color: "#fff",
@@ -1049,6 +1938,672 @@
 			document.body.appendChild(skipBtn);
 		}
 
+		getPlaybackTimeSec() {
+			const shimTime = window.StremioCustomPlayback?.getCurrentTime?.();
+			if (Number.isFinite(shimTime) && shimTime >= 0) return shimTime;
+			const video = this.getPlaybackVideo();
+			if (video && Number.isFinite(video.currentTime) && video.currentTime >= 0) {
+				return video.currentTime;
+			}
+			return 0;
+		}
+
+		getPlaybackDurationSec() {
+			const shimDuration = window.StremioCustomPlayback?.getDuration?.();
+			if (Number.isFinite(shimDuration) && shimDuration > 0) return shimDuration;
+			const video = this.getPlaybackVideo();
+			if (video && Number.isFinite(video.duration) && video.duration > 0) {
+				return video.duration;
+			}
+			return null;
+		}
+
+		parseMediaContext() {
+			if (!this.episodeId) return null;
+			const parsedEpisode = parseTvEpisodeId(this.episodeId);
+			const id = parsedEpisode?.idPart || String(this.episodeId).split(":")[0];
+			const season =
+				isPlausibleSeason(this.playbackSeason) ? this.playbackSeason : parsedEpisode?.season;
+			const episode =
+				isPlausibleEpisode(this.playbackEpisode) ? this.playbackEpisode : parsedEpisode?.episode;
+			const isTv = isPlausibleSeason(season) && isPlausibleEpisode(episode);
+
+			const context = {
+				type: isTv ? "tv" : "movie"
+			};
+			if (isTv) {
+				context.season = Number(season);
+				context.episode = Number(episode);
+			}
+
+			const itemImdbId =
+				extractImdbId(id) ||
+				parsedEpisode?.imdbId ||
+				this.mediaImdbId ||
+				extractImdbId(this.episodeId);
+			const seriesImdbId = isTv ? this.seriesImdbId : null;
+			const submissionImdbId = isTv && seriesImdbId ? seriesImdbId : itemImdbId;
+
+			if (itemImdbId) {
+				context.imdbId = itemImdbId;
+			}
+			if (submissionImdbId) {
+				context.submissionImdbId = submissionImdbId;
+			}
+
+			const tmdbCandidate =
+				this.resolvedTmdbId && isValidTmdbId(this.resolvedTmdbId)
+					? Number(this.resolvedTmdbId)
+					: parsedEpisode?.tmdbId || extractTmdbIdFromCatalogId(id);
+			if (tmdbCandidate) {
+				context.tmdbId = tmdbCandidate;
+			}
+
+			if (context.imdbId || context.tmdbId) {
+				return context;
+			}
+
+			return null;
+		}
+
+		normalizeSubmissionTimes(segment, startSec, endSec, durationSec) {
+			let start = startSec;
+			let end = endSec;
+			if (segment === "intro" || segment === "recap") {
+				if (start == null || !Number.isFinite(start)) start = 0;
+			}
+			if (segment === "credits" || segment === "preview") {
+				if (end == null || !Number.isFinite(end)) end = null;
+			}
+			if (start != null && end != null && Number.isFinite(start) && Number.isFinite(end) && end < start) {
+				return { error: "End time must be after start time." };
+			}
+			if (durationSec != null && start != null && Number.isFinite(start) && start > durationSec) {
+				return { error: "Start time is beyond the episode duration." };
+			}
+			return { start, end };
+		}
+
+		buildSubmissionBody(segment, startSec, endSec, durationMs, mediaContext) {
+			const media = mediaContext || this.parseMediaContext();
+			if (!media) return null;
+			const body = {
+				type: media.type,
+				segment,
+				video_duration_ms: durationMs
+			};
+			if (media.imdbId) {
+				body.imdb_id = media.submissionImdbId || media.imdbId;
+			}
+			if (media.tmdbId != null && isValidTmdbId(media.tmdbId)) {
+				body.tmdb_id = Number(media.tmdbId);
+			}
+			if (!body.tmdb_id) return null;
+			if (!body.imdb_id && !body.tmdb_id) return null;
+			if (media.type === "tv") {
+				if (!isPlausibleSeason(media.season) || !isPlausibleEpisode(media.episode)) {
+					return null;
+				}
+				body.season = Number(media.season);
+				body.episode = Number(media.episode);
+			}
+			if (startSec != null && Number.isFinite(startSec)) {
+				body.start_ms = Math.round(startSec * 1000);
+			}
+			if (endSec != null && Number.isFinite(endSec)) {
+				body.end_ms = Math.round(endSec * 1000);
+			}
+			return body;
+		}
+
+		ensureContributePanelOpen() {
+			const panel = document.getElementById(CONTRIBUTE_PANEL_ID);
+			if (!panel) return;
+			panel.classList.add("open");
+			this.contributePanelOpen = true;
+		}
+
+		showContributeToast(message, kind) {
+			if (!message) return;
+			injectContributeStyles();
+			let toast = document.getElementById(CONTRIBUTE_TOAST_ID);
+			if (!toast) {
+				toast = document.createElement("div");
+				toast.id = CONTRIBUTE_TOAST_ID;
+				document.body.appendChild(toast);
+			}
+			toast.textContent = message;
+			toast.className = "visible" + (kind ? ` ${kind}` : "");
+			if (this.contributeToastTimer) {
+				window.clearTimeout(this.contributeToastTimer);
+			}
+			this.contributeToastTimer = window.setTimeout(() => {
+				toast.className = "";
+				toast.textContent = "";
+			}, 12000);
+		}
+
+		setContributeStatus(message, kind) {
+			if (kind === "success" || kind === "error") {
+				this.ensureContributePanelOpen();
+				this.showContributeToast(message, kind);
+			}
+			const panel = document.getElementById(CONTRIBUTE_PANEL_ID);
+			if (!panel) return;
+			const status = panel.querySelector(".tidb-contribute-status");
+			if (!status) return;
+			status.textContent = message || "";
+			status.classList.remove("error", "success");
+			if (kind) status.classList.add(kind);
+		}
+
+		positionContributePanel() {
+			const panel = document.getElementById(CONTRIBUTE_PANEL_ID);
+			if (!panel) return;
+
+			const panelWidth = panel.offsetWidth || 320;
+			const panelHeight = panel.offsetHeight || 360;
+			const margin = 14;
+			const seekBar = document.querySelector('[class*="player-container"] [class*="seek-bar-container"]');
+			const buttonsContainer = document.querySelector('[class*="player-container"] [class*="control-bar-buttons-container"]');
+
+			let left = 12;
+			if (buttonsContainer) {
+				const rect = buttonsContainer.getBoundingClientRect();
+				left = Math.min(
+					Math.max(margin, rect.right - panelWidth),
+					window.innerWidth - panelWidth - margin
+				);
+			}
+
+			panel.style.left = `${left}px`;
+			panel.style.right = "auto";
+
+			if (seekBar) {
+				const seekRect = seekBar.getBoundingClientRect();
+				const top = seekRect.top - panelHeight - margin;
+				if (top >= margin) {
+					panel.style.top = `${top}px`;
+					panel.style.bottom = "auto";
+				} else {
+					panel.style.top = `${margin}px`;
+					panel.style.bottom = "auto";
+				}
+			} else {
+				panel.style.top = "auto";
+				panel.style.bottom = `${margin + 120}px`;
+			}
+		}
+
+		sendMpvPause(paused) {
+			if (!window.chrome?.webview?.postMessage) return;
+			try {
+				window.chrome.webview.postMessage(
+					JSON.stringify({
+						id: Date.now(),
+						args: ["mpv-set-prop", ["pause", Boolean(paused)]]
+					})
+				);
+			} catch (_) {}
+		}
+
+		pausePlaybackForContribute() {
+			this.contributeResumeOnClose = true;
+			const video = this.getPlaybackVideo();
+			if (video && typeof video.pause === "function") {
+				video.pause();
+			} else {
+				this.sendMpvPause(true);
+			}
+		}
+
+		resumePlaybackForContribute() {
+			if (!this.contributeResumeOnClose) return;
+			this.contributeResumeOnClose = false;
+			this.sendMpvPause(false);
+		}
+
+		lockPlayerOverlay() {
+			document.documentElement.classList.add(CONTRIBUTE_OVERLAY_LOCK_CLASS);
+			const playerContainer = document.querySelector('[class*="player-container"]');
+			if (playerContainer) {
+				playerContainer.classList.forEach((className) => {
+					if (className.includes("overlayHidden")) {
+						playerContainer.classList.remove(className);
+					}
+				});
+			}
+		}
+
+		unlockPlayerOverlay() {
+			document.documentElement.classList.remove(CONTRIBUTE_OVERLAY_LOCK_CLASS);
+			if (this.contributeOverlayTimer) {
+				window.clearInterval(this.contributeOverlayTimer);
+				this.contributeOverlayTimer = null;
+			}
+		}
+
+		startContributeOverlayKeepAlive() {
+			if (this.contributeOverlayTimer) return;
+			this.contributeOverlayTimer = window.setInterval(() => {
+				if (!this.contributePanelOpen) return;
+				this.lockPlayerOverlay();
+				this.positionContributePanel();
+			}, 350);
+		}
+
+		saveContributeFormDraft() {
+			const fields = this.getContributePanelFields();
+			if (!fields) return;
+			this.contributeFormDraft = {
+				segment: fields.segmentSelect.value,
+				startValue: fields.startInput.value,
+				endValue: fields.endInput.value,
+				markedStartSec: this.contributeMarkedStartSec
+			};
+			this.contributeSelectedSegment = fields.segmentSelect.value;
+		}
+
+		restoreContributeFormDraft() {
+			const fields = this.getContributePanelFields();
+			if (!fields) return;
+			if (this.contributeFormDraft) {
+				fields.segmentSelect.value = this.contributeFormDraft.segment;
+				fields.startInput.value = this.contributeFormDraft.startValue;
+				fields.endInput.value = this.contributeFormDraft.endValue;
+				this.contributeSelectedSegment = this.contributeFormDraft.segment;
+				this.contributeMarkedStartSec =
+					this.contributeFormDraft.markedStartSec != null &&
+					Number.isFinite(this.contributeFormDraft.markedStartSec)
+						? this.contributeFormDraft.markedStartSec
+						: null;
+				this.refreshContributeMarkHint();
+				return;
+			}
+			this.applyContributeDefaults(this.contributeSelectedSegment, { resetMarkedStart: true });
+		}
+
+		getContributePanelFields() {
+			const panel = document.getElementById(CONTRIBUTE_PANEL_ID);
+			if (!panel) return null;
+			return {
+				panel,
+				segmentSelect: panel.querySelector("[data-tidb-segment]"),
+				startInput: panel.querySelector("[data-tidb-start]"),
+				endInput: panel.querySelector("[data-tidb-end]"),
+				markHint: panel.querySelector(".tidb-contribute-mark-hint"),
+				submitBtn: panel.querySelector("[data-tidb-submit]")
+			};
+		}
+
+		refreshContributeMarkHint() {
+			const fields = this.getContributePanelFields();
+			if (!fields || !fields.markHint) return;
+			if (this.contributeMarkedStartSec == null) {
+				fields.markHint.textContent = "";
+				return;
+			}
+			fields.markHint.textContent = `Start marked at ${formatClockTime(this.contributeMarkedStartSec)} — keep watching, then press "Set as end".`;
+		}
+
+		applyContributeDefaults(segmentType, options = {}) {
+			const fields = this.getContributePanelFields();
+			if (!fields) return;
+			const resetMarkedStart = Boolean(options.resetMarkedStart);
+			const current = this.getPlaybackTimeSec();
+			const duration = this.getPlaybackDurationSec();
+			if (segmentType === "intro" || segmentType === "recap") {
+				fields.startInput.value = formatClockTime(0);
+				fields.endInput.value = formatClockTime(current);
+			} else {
+				fields.startInput.value = formatClockTime(current);
+				fields.endInput.value = duration != null ? formatClockTime(duration) : "";
+			}
+			if (resetMarkedStart) {
+				this.contributeMarkedStartSec = null;
+				this.refreshContributeMarkHint();
+			}
+		}
+
+		openContributePanel() {
+			injectContributeStyles();
+			let panel = document.getElementById(CONTRIBUTE_PANEL_ID);
+			if (!panel) {
+				panel = document.createElement("div");
+				panel.id = CONTRIBUTE_PANEL_ID;
+				panel.innerHTML = `
+					<div class="tidb-contribute-header">
+						<div class="tidb-contribute-title">Submit timestamp</div>
+						<button type="button" class="tidb-contribute-close" data-tidb-close aria-label="Close">×</button>
+					</div>
+					<label for="tidb-contribute-segment">Segment</label>
+					<select id="tidb-contribute-segment" data-tidb-segment>
+						<option value="intro">Intro</option>
+						<option value="recap">Recap</option>
+						<option value="credits">Credits</option>
+						<option value="preview">Preview</option>
+					</select>
+					<div class="tidb-contribute-time-block">
+						<div>
+							<label for="tidb-contribute-start">Start time</label>
+							<input id="tidb-contribute-start" data-tidb-start type="text" placeholder="e.g. 0:00 or 90" />
+							<div class="tidb-contribute-chip-row">
+								<button type="button" class="tidb-contribute-chip" data-tidb-start-current>Current position</button>
+								<button type="button" class="tidb-contribute-chip" data-tidb-start-begin>Episode start</button>
+								<button type="button" class="tidb-contribute-chip" data-tidb-mark-start>Mark start</button>
+							</div>
+						</div>
+						<div>
+							<label for="tidb-contribute-end">End time</label>
+							<input id="tidb-contribute-end" data-tidb-end type="text" placeholder="empty = until episode end" />
+							<div class="tidb-contribute-chip-row">
+								<button type="button" class="tidb-contribute-chip" data-tidb-end-current>Current position</button>
+								<button type="button" class="tidb-contribute-chip" data-tidb-end-finish>Episode end</button>
+								<button type="button" class="tidb-contribute-chip" data-tidb-end-marked>Set as end</button>
+							</div>
+						</div>
+					</div>
+					<div class="tidb-contribute-mark-hint"></div>
+					<div class="tidb-contribute-status"></div>
+					<button type="button" class="tidb-contribute-submit" data-tidb-submit>Submit</button>
+				`;
+				document.body.appendChild(panel);
+
+				panel.querySelector("[data-tidb-close]").addEventListener("click", () => this.closeContributePanel());
+				panel.querySelector("[data-tidb-segment]").addEventListener("change", (event) => {
+					this.contributeSelectedSegment = event.target.value;
+					this.applyContributeDefaults(this.contributeSelectedSegment, { resetMarkedStart: true });
+				});
+				panel.querySelector("[data-tidb-start-current]").addEventListener("click", () => {
+					const fields = this.getContributePanelFields();
+					if (fields) fields.startInput.value = formatClockTime(this.getPlaybackTimeSec());
+				});
+				panel.querySelector("[data-tidb-start-begin]").addEventListener("click", () => {
+					const fields = this.getContributePanelFields();
+					if (fields) fields.startInput.value = formatClockTime(0);
+				});
+				panel.querySelector("[data-tidb-mark-start]").addEventListener("click", () => {
+					this.contributeMarkedStartSec = this.getPlaybackTimeSec();
+					const fields = this.getContributePanelFields();
+					if (fields) fields.startInput.value = formatClockTime(this.contributeMarkedStartSec);
+					this.refreshContributeMarkHint();
+					this.saveContributeFormDraft();
+				});
+				panel.querySelector("[data-tidb-end-current]").addEventListener("click", () => {
+					const fields = this.getContributePanelFields();
+					if (fields) fields.endInput.value = formatClockTime(this.getPlaybackTimeSec());
+				});
+				panel.querySelector("[data-tidb-end-finish]").addEventListener("click", () => {
+					const duration = this.getPlaybackDurationSec();
+					const fields = this.getContributePanelFields();
+					if (!fields) return;
+					fields.endInput.value = duration != null ? formatClockTime(duration) : "";
+				});
+				panel.querySelector("[data-tidb-end-marked]").addEventListener("click", () => {
+					const fields = this.getContributePanelFields();
+					if (!fields) return;
+					fields.endInput.value = formatClockTime(this.getPlaybackTimeSec());
+					if (this.contributeMarkedStartSec != null) {
+						fields.startInput.value = formatClockTime(this.contributeMarkedStartSec);
+					}
+					this.contributeMarkedStartSec = null;
+					this.refreshContributeMarkHint();
+				});
+				panel.querySelector("[data-tidb-submit]").addEventListener("click", () => {
+					this.submitContributeTimestamp();
+				});
+			}
+
+			this.restoreContributeFormDraft();
+
+			panel.classList.add("open");
+			this.contributePanelOpen = true;
+			this.setContributeStatus("");
+			this.pausePlaybackForContribute();
+			this.lockPlayerOverlay();
+			this.startContributeOverlayKeepAlive();
+			this.positionContributePanel();
+
+			if (!this.contributeOutsideHandler) {
+				this.contributeOutsideHandler = (event) => {
+					if (this.contributeSubmitting) return;
+					const panelEl = document.getElementById(CONTRIBUTE_PANEL_ID);
+					const btnEl = document.getElementById(CONTRIBUTE_BTN_ID);
+					if (!panelEl || !panelEl.classList.contains("open")) return;
+					if (panelEl.contains(event.target) || btnEl && btnEl.contains(event.target)) return;
+					this.closeContributePanel();
+				};
+				document.addEventListener("mousedown", this.contributeOutsideHandler, true);
+			}
+			if (!this.contributeKeyHandler) {
+				this.contributeKeyHandler = (event) => {
+					if (event.key === "Escape") this.closeContributePanel();
+				};
+				document.addEventListener("keydown", this.contributeKeyHandler);
+			}
+		}
+
+		closeContributePanel() {
+			if (this.contributePanelOpen) {
+				this.saveContributeFormDraft();
+			}
+			const panel = document.getElementById(CONTRIBUTE_PANEL_ID);
+			if (panel) panel.classList.remove("open");
+			this.contributePanelOpen = false;
+			this.resumePlaybackForContribute();
+			this.unlockPlayerOverlay();
+		}
+
+		toggleContributePanel() {
+			if (this.contributePanelOpen) {
+				this.closeContributePanel();
+			} else {
+				this.openContributePanel();
+			}
+		}
+
+		removeContributeUi() {
+			this.closeContributePanel();
+			this.resumePlaybackForContribute();
+			this.unlockPlayerOverlay();
+			document.getElementById(CONTRIBUTE_BTN_ID)?.remove();
+			document.getElementById(CONTRIBUTE_PANEL_ID)?.remove();
+			if (this.contributeOutsideHandler) {
+				document.removeEventListener("mousedown", this.contributeOutsideHandler, true);
+				this.contributeOutsideHandler = null;
+			}
+			if (this.contributeKeyHandler) {
+				document.removeEventListener("keydown", this.contributeKeyHandler);
+				this.contributeKeyHandler = null;
+			}
+			this.contributeFormDraft = null;
+			this.contributeMarkedStartSec = null;
+		}
+
+		ensureContributeUi() {
+			injectContributeStyles();
+			if (!this.userApiKey || !this.isOnPlayerRoute()) {
+				this.removeContributeUi();
+				return;
+			}
+
+			const container = document.querySelector('[class*="player-container"] [class*="control-bar-buttons-container"]');
+			if (!container) return;
+
+			let button = document.getElementById(CONTRIBUTE_BTN_ID);
+			if (button && isStaleContributeButton(button)) {
+				button.remove();
+				button = null;
+			}
+			if (!button) {
+				const template = getContributeButtonTemplate();
+				if (template) {
+					button = template.cloneNode(true);
+					button.classList.remove("disabled");
+					button.removeAttribute("tabindex");
+					button.querySelectorAll('[class*="button-container"]').forEach((el) => el.remove());
+				} else {
+					button = document.createElement("button");
+					button.type = "button";
+				}
+				button.id = CONTRIBUTE_BTN_ID;
+				button.classList.add(CONTRIBUTE_BTN_CLASS);
+				button.title = "Submit TheIntroDB timestamp";
+				button.setAttribute("aria-label", "Submit TheIntroDB timestamp");
+				replaceContributeIcon(button);
+				button.addEventListener("click", (event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					this.toggleContributePanel();
+				});
+				const menuButton = container.querySelector('[class*="control-bar-buttons-menu-button"]');
+				if (menuButton) {
+					container.insertBefore(button, menuButton);
+				} else {
+					container.appendChild(button);
+				}
+			}
+
+			if (this.contributePanelOpen) {
+				this.positionContributePanel();
+			}
+		}
+
+		async submitContributeTimestamp() {
+			if (this.contributeSubmitting) return;
+			if (!this.userApiKey) {
+				this.setContributeStatus("Please add your TIDB API key in the plugin settings.", "error");
+				return;
+			}
+
+			const fields = this.getContributePanelFields();
+			if (!fields) return;
+
+			const segment = fields.segmentSelect.value;
+			const durationSec = this.getPlaybackDurationSec();
+			const durationMs = getVideoDurationMs(this.getPlaybackVideo());
+			if (durationMs == null) {
+				this.setContributeStatus("Episode duration not available yet — please wait a moment.", "error");
+				return;
+			}
+
+			const startRaw = fields.startInput.value.trim();
+			const endRaw = fields.endInput.value.trim();
+			let startSec = startRaw ? parseTimeInput(startRaw) : null;
+			let endSec = endRaw ? parseTimeInput(endRaw) : null;
+
+			if (startRaw && startSec == null) {
+				this.setContributeStatus("Invalid start time. Use seconds or mm:ss.", "error");
+				return;
+			}
+			if (endRaw && endSec == null) {
+				this.setContributeStatus("Invalid end time. Use seconds or mm:ss.", "error");
+				return;
+			}
+			if ((segment === "intro" || segment === "recap") && (endSec == null || !Number.isFinite(endSec))) {
+				this.setContributeStatus("Intro and recap require an end time.", "error");
+				return;
+			}
+			if ((segment === "credits" || segment === "preview") && (startSec == null || !Number.isFinite(startSec))) {
+				this.setContributeStatus("Credits and preview require a start time.", "error");
+				return;
+			}
+
+			const normalized = this.normalizeSubmissionTimes(segment, startSec, endSec, durationSec);
+			if (normalized.error) {
+				this.setContributeStatus(normalized.error, "error");
+				return;
+			}
+			startSec = normalized.start;
+			endSec = normalized.end;
+
+			const mediaContext = await this.prepareSubmissionMediaContext(durationMs);
+			if (!mediaContext || (!mediaContext.imdbId && !mediaContext.tmdbId)) {
+				this.setContributeStatus(
+					"Could not resolve a valid IMDB or TMDB ID for this title. Use a Cinemeta/IMDB-linked source.",
+					"error"
+				);
+				return;
+			}
+
+			const body = this.buildSubmissionBody(segment, startSec, endSec, durationMs, mediaContext);
+			if (!body) {
+				const hasTmdbKey = Boolean(await this.getCrossPluginSetting("data-enrichment", "tmdbApiKey"));
+				const badSeason =
+					mediaContext &&
+					mediaContext.type === "tv" &&
+					(!isPlausibleSeason(mediaContext.season) || !isPlausibleEpisode(mediaContext.episode));
+				this.setContributeStatus(
+					badSeason
+						? "Could not resolve season/episode for this title. Pause playback briefly and try again."
+						: hasTmdbKey
+							? "Could not resolve TMDB ID for this episode (required for v3 submit). Wait a moment and try again."
+							: "Could not resolve TMDB ID. Add a TMDB API key in Settings (Data Enrichment) or use a Cinemeta/IMDB source.",
+					"error"
+				);
+				return;
+			}
+
+			this.contributeSubmitting = true;
+			fields.submitBtn.disabled = true;
+			this.setContributeStatus("Submitting…");
+
+			try {
+				console.log("[TheIntroDB] Submit payload:", body);
+				const res = await fetch(`${SERVER_URL}/submit`, {
+					method: "POST",
+					headers: {
+						...this.getTidbHeaders(),
+						"Content-Type": "application/json",
+						Accept: "application/json"
+					},
+					credentials: "omit",
+					body: JSON.stringify(body)
+				});
+
+				const responseText = await res.text();
+				let responseJson = null;
+				try {
+					responseJson = responseText ? JSON.parse(responseText) : null;
+				} catch (_) {}
+
+				console.log("[TheIntroDB] Submit response:", res.status, responseJson || responseText);
+
+				if (!res.ok) {
+					const apiMessage = responseJson && (responseJson.message || responseJson.error);
+					this.setContributeStatus(
+						apiMessage
+							? this.formatSubmitAuthError(apiMessage)
+							: `Submission failed (${res.status}).`,
+						"error"
+					);
+					return;
+				}
+
+				const submissionResult = parseSubmissionResponse(responseJson);
+				if (!submissionResult.ok) {
+					this.setContributeStatus(
+						"The server accepted the request but did not return a submission. Try again or check theintrodb.org Stats.",
+						"error"
+					);
+					return;
+				}
+
+				this.track("timestamp_submitted", { segment });
+				this.setContributeStatus(formatSubmissionSuccessMessage(submissionResult), "success");
+				this.contributeFormDraft = null;
+				this.contributeMarkedStartSec = null;
+				this.refreshContributeMarkHint();
+				await this.fetchData();
+			} catch (error) {
+				console.error("[TheIntroDB] Submit failed:", error);
+				this.setContributeStatus("Network error while submitting.", "error");
+			} finally {
+				this.contributeSubmitting = false;
+				fields.submitBtn.disabled = false;
+			}
+		}
+
 		cleanup() {
 			console.log("[TheIntroDB] Cleaning up previous media...");
 
@@ -1067,6 +2622,9 @@
 				this.seekBarObserver = null;
 			}
 			this.removeActiveButton();
+			this.removeContributeUi();
+			this._fetchGeneration += 1;
+			this._segmentsLoadedEpisodeId = null;
 			if (this._autoSkippedKeys) {
 				this._autoSkippedKeys.clear();
 			}
@@ -1077,11 +2635,21 @@
 				segments: emptySegments(),
 				activeSegment: null,
 				displayedSegmentType: null,
-				_lastFetchedDurationMs: null
+				_lastFetchedDurationMs: null,
+				mediaImdbId: null,
+				seriesImdbId: null,
+				playbackSeason: null,
+				playbackEpisode: null,
+				resolvedTmdbId: null
 			});
+			if (this.contributeToastTimer) {
+				window.clearTimeout(this.contributeToastTimer);
+				this.contributeToastTimer = null;
+			}
 		}
 
 		destroy() {
+			this.removeContributeUi();
 			this.cleanup();
 			if (this._observer) {
 				this._observer.disconnect();

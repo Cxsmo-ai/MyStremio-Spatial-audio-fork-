@@ -152,7 +152,7 @@ function Ensure-StreamUiSchema {
     if (-not (Test-Path $PluginsDir)) { return }
     $schemaSource = Join-Path (Join-Path $PSScriptRoot "..\assets") "stream-ui.plugin.schema.json"
     if (-not (Test-Path $schemaSource)) { return }
-    $schemaTarget = Join-Path $PluginsDir "stream-ui.plugin.schema.json"
+    $schemaTarget = Join-Path $PluginsDir "player\stream-ui.plugin.schema.json"
 
     try {
         Copy-Item -Path $schemaSource -Destination $schemaTarget -Force
@@ -204,32 +204,6 @@ function Patch-StreamUiPlugin {
     }
 }
 
-function Patch-HeroDivPlugin {
-    param([string]$PluginsDir)
-
-    if (-not (Test-Path $PluginsDir)) { return }
-    $pluginPath = Join-Path $PluginsDir "interface\hero-div.plugin.js"
-    if (-not (Test-Path $pluginPath)) { return }
-
-    try {
-        $raw = Get-Content $pluginPath -Raw -Encoding UTF8
-        if (-not $raw) { return }
-        $patched = $raw.Replace(
-            "margin-top: -15px !important;",
-            "margin-top: 0 !important;"
-        ).Replace(
-            "min-height: 900px;",
-            "min-height: 900px;`r`n                    border-top: 0 !important;"
-        )
-        if ($patched -ne $raw) {
-            Set-Content -Path $pluginPath -Value $patched -Encoding UTF8
-            Write-Host "Patched hero-div plugin top spacing to remove frame seam."
-        }
-    } catch {
-        Write-Warning ("Could not patch hero-div plugin in " + $PluginsDir + ": " + $_)
-    }
-}
-
 function Remove-DeprecatedAssets {
     param(
         [string]$PluginsDir,
@@ -241,9 +215,16 @@ function Remove-DeprecatedAssets {
         "player\filter-streams.plugin.js",
         "interface\enhancements-tweaks.plugin.js",
         "interface\horizontal-navigation.plugin.js",
+        "interface\hero-div.plugin.js",
         "metadata\card-hover-info.plugin.js",
         "metadata\playback-preview.plugin.js",
-        "metadata\trending-anime.plugin.js"
+        "metadata\trending-anime.plugin.js",
+        "player\AniSkip.plugin.js",
+        "player\enhanced-external-player.plugin.js",
+        "player\enhanced-player.plugin.js",
+        "player\stream-quality-picker.plugin.js",
+        "utilities\dom-inspector.plugin.js",
+        "utilities\initializer.plugin.js"
     )
     $deprecatedThemes = @(
         "amoled.theme.css",
@@ -299,38 +280,6 @@ function Patch-DataEnrichmentPlugin {
         }
     } catch {
         Write-Warning ("Could not patch data-enrichment plugin in " + $PluginsDir + ": " + $_)
-    }
-}
-
-function Patch-EnhancedPlayerPlugin {
-    param([string]$PluginsDir)
-
-    if (-not (Test-Path $PluginsDir)) { return }
-    $pluginPath = Join-Path $PluginsDir "player\enhanced-player.plugin.js"
-    if (-not (Test-Path $pluginPath)) { return }
-
-    try {
-        $raw = Get-Content $pluginPath -Raw -Encoding UTF8
-        if (-not $raw) { return }
-        $patched = $raw.Replace(
-            "background: rgba(70, 70, 70, 0.28);",
-            "background: rgba(70, 70, 70, 0.22);"
-        ).Replace(
-            "background: rgba(70, 70, 70, 0.22); border: 1px solid rgba(255,255,255,0.08);",
-            "background: rgba(70, 70, 70, 0.16); border: 1px solid rgba(255,255,255,0.08);"
-        ).Replace(
-            "background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);",
-            "background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7);"
-        ).Replace(
-            "border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);",
-            "border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05);"
-        )
-        if ($patched -ne $raw) {
-            Set-Content -Path $pluginPath -Value $patched -Encoding UTF8
-            Write-Host "Patched enhanced-player subtitle panel opacity for Liquid Glass."
-        }
-    } catch {
-        Write-Warning ("Could not patch enhanced-player plugin in " + $PluginsDir + ": " + $_)
     }
 }
 
@@ -392,9 +341,7 @@ foreach ($target in $PluginTargets) {
     Copy-TreeIfExists -Source $PluginSource -Destination $target
     Ensure-StreamUiSchema -PluginsDir $target
     Patch-StreamUiPlugin -PluginsDir $target
-    Patch-HeroDivPlugin -PluginsDir $target
     Patch-DataEnrichmentPlugin -PluginsDir $target
-    Patch-EnhancedPlayerPlugin -PluginsDir $target
     if ($target -eq (Join-Path $ReleaseDir "plugins")) {
         Sanitize-PluginConfigs -PluginsDir $target
         Patch-ContextMenuFixPlugin -PluginsDir $target

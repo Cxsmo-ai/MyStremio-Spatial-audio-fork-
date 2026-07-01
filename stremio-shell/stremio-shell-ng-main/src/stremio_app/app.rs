@@ -132,6 +132,7 @@ impl MainWindow {
             eprintln!("Cannot obtain window handle or communication channel");
         }
     }
+
     fn on_init(&self) {
         custom_api::init();
         self.webview.endpoint.set(self.webui_url.clone()).ok();

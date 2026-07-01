@@ -5,6 +5,7 @@
   window.__stremioCustomPlaybackApi = true;
 
   const VIDEO_ATTR = 'data-stremio-custom-shell-video';
+  const STARTUP_CACHE_SECS = 12;
   let shellMsgId = 12000;
   let shimVideo = null;
   let shimState = {
@@ -17,6 +18,12 @@
   let lastSeekTarget = null;
   let lastSeekAt = 0;
   let mpvCacheAheadSec = 0;
+  let mpvPause = false;
+  let mpvPausedForCache = false;
+  let currentStreamPath = '';
+  let preloadBoostApplied = false;
+  let recoveryMutedUntil = 0;
+  let streamStartedAt = 0;
   let pollTimer = null;
   let hookInstalled = false;
 
@@ -168,7 +175,7 @@
       shimState.metadataLoaded = true;
       dispatchVideoEvent('loadedmetadata');
     }
-    if (changed && getPreloadMode() === 'full') applyPreloadSettings();
+    if (changed && getPreloadMode() === 'full') maybeBoostPreload();
   }
 
   function updateCurrentTime(nextTime, source) {
@@ -208,14 +215,25 @@
       if (shimState.seeking) return;
       const seconds = Number(change.data);
       if (Number.isFinite(seconds)) {
+        // Always mark MPV as alive on time-pos, even at 0:00 (delta filter in
+        // updateCurrentTime would otherwise leave lastMpvTimeAt at 0 and trigger
+        // false-positive recovery seeks that flip the play/pause UI).
+        lastMpvTimeAt = Date.now();
         updateCurrentTime(seconds, 'mpv');
+        maybeBoostPreload();
       }
       return;
     }
 
     if (change.name === 'duration') {
       const seconds = Number(change.data);
-      if (Number.isFinite(seconds)) updateDuration(seconds);
+      if (Number.isFinite(seconds)) {
+        const hadDuration = Number.isFinite(shimState.duration) && shimState.duration > 0;
+        updateDuration(seconds);
+        if (!hadDuration && seconds > 0 && currentStreamPath) {
+          window.setTimeout(() => kickPlaybackDecoder(shimState.currentTime), 150);
+        }
+      }
       return;
     }
 
@@ -224,14 +242,111 @@
       if (Number.isFinite(seconds) && seconds >= 0) {
         mpvCacheAheadSec = seconds;
         dispatchVideoEvent('progress');
+        maybeBoostPreload();
       }
+      return;
+    }
+
+    if (change.name === 'pause') {
+      mpvPause = Boolean(change.data);
+      return;
+    }
+
+    if (change.name === 'paused-for-cache') {
+      const wasBuffering = mpvPausedForCache;
+      mpvPausedForCache = Boolean(change.data);
+      if (wasBuffering && !mpvPausedForCache && currentStreamPath) {
+        window.setTimeout(() => kickPlaybackDecoder(shimState.currentTime), 100);
+      }
+      maybeBoostPreload();
       return;
     }
 
     if (change.name === 'path') {
       const streamPath = typeof change.data === 'string' ? change.data : '';
-      if (streamPath) window.StremioCustomStreamCache?.setStreamPath?.(streamPath);
+      if (streamPath) {
+        window.StremioCustomStreamCache?.setStreamPath?.(streamPath);
+        onStreamPathChanged(streamPath);
+      }
     }
+  }
+
+  function uiShowsPlaying() {
+    const pauseBtn = document.querySelector(
+      '[class*="player-container"] [class*="control-bar"] [title*="Pause"],' +
+        '[class*="player-container"] [class*="control-bar"] [aria-label*="Pause"],' +
+        '[class*="player-container"] [class*="control-bar"] [title*="pause"],' +
+        '[class*="player-container"] [class*="control-bar"] [aria-label*="pause"]'
+    );
+    return Boolean(pauseBtn);
+  }
+
+  function onStreamPathChanged(streamPath) {
+    if (!streamPath || streamPath === currentStreamPath) return;
+    currentStreamPath = streamPath;
+    streamStartedAt = Date.now();
+    preloadBoostApplied = false;
+    recoveryMutedUntil = 0;
+    lastMpvTimeAt = 0;
+    schedulePlaybackKickoff();
+  }
+
+  function kickPlaybackDecoder(seconds) {
+    playShellPlayback();
+    const base = Number(seconds);
+    if (!Number.isFinite(base) || base <= 0) {
+      return;
+    }
+    sendMpvSetProp('time-pos', base + 0.05);
+  }
+
+  function schedulePlaybackKickoff() {
+    let attempts = 0;
+    const kick = () => {
+      if (!isPlayerRoute() || !currentStreamPath) return;
+      attempts += 1;
+
+      if (attempts === 1) {
+        playShellPlayback();
+      }
+
+      const startupGrace = Date.now() - streamStartedAt < 4000;
+      const timeNotMoving = lastMpvTimeAt > 0 && Date.now() - lastMpvTimeAt > 1500;
+      if (!startupGrace && attempts >= 3 && timeNotMoving && !mpvPausedForCache && !mpvPause) {
+        kickPlaybackDecoder(shimState.currentTime || readTimeFromDom() || 0);
+      }
+
+      if (attempts < 10) {
+        window.setTimeout(kick, 500);
+      }
+    };
+    window.setTimeout(kick, 250);
+  }
+
+  function runPlaybackRecovery() {
+    if (!isPlayerRoute() || !currentStreamPath) return;
+    if (Date.now() < recoveryMutedUntil) return;
+    if (mpvPausedForCache) return;
+    if (Date.now() - streamStartedAt < 5000) return;
+
+    const duration = shimState.duration || readDurationFromDom();
+    if (!duration || !Number.isFinite(duration) || duration <= 0) return;
+
+    const userPaused = mpvPause && !uiShowsPlaying();
+    if (userPaused) return;
+
+    const timeStale = lastMpvTimeAt > 0 && Date.now() - lastMpvTimeAt > 2500;
+    if (!timeStale) return;
+
+    const resumeAt = shimState.currentTime || readTimeFromDom() || 0;
+    if (mpvPause) {
+      playShellPlayback();
+      recoveryMutedUntil = Date.now() + 1500;
+      return;
+    }
+
+    kickPlaybackDecoder(resumeAt);
+    recoveryMutedUntil = Date.now() + 2000;
   }
 
   function hookShellMessages() {
@@ -275,7 +390,13 @@
           args: ['mpv-set-prop', ['pause', true]],
         })
       );
+      mpvPause = true;
     } catch (_) {}
+  }
+
+  function playShellPlayback() {
+    if (!sendMpvSetProp('pause', false)) return;
+    mpvPause = false;
   }
 
   function setupVideoShim(video) {
@@ -323,7 +444,10 @@
     video.pause = () => {
       pauseShellPlayback();
     };
-    video.play = () => Promise.resolve();
+    video.play = () => {
+      playShellPlayback();
+      return Promise.resolve();
+    };
 
     Object.defineProperty(video, 'buffered', {
       configurable: true,
@@ -361,6 +485,24 @@
     sendMpvObserve('duration');
     sendMpvObserve('demuxer-cache-time');
     sendMpvObserve('path');
+    sendMpvObserve('pause');
+    sendMpvObserve('paused-for-cache');
+  }
+
+  function maybeBoostPreload() {
+    if (preloadBoostApplied || !isPlayerRoute()) return;
+
+    const targetSecs = resolvePreloadSecs();
+    const wantsFull = getPreloadMode() === 'full';
+    if (!wantsFull && targetSecs <= STARTUP_CACHE_SECS) {
+      preloadBoostApplied = true;
+      return;
+    }
+
+    const timeMoving =
+      shimState.currentTime > 0.15 && Date.now() - lastMpvTimeAt < 4000;
+    if (!timeMoving) return;
+
     applyPreloadSettings();
   }
 
@@ -370,9 +512,9 @@
       const raw = localStorage.getItem(PRELOAD_KEY);
       if (raw === 'full') return 'full';
       const stored = Number(raw);
-      if (Number.isFinite(stored) && stored >= 30) return stored;
+      if (Number.isFinite(stored) && stored >= 10) return stored;
     } catch (_) {}
-    return 120;
+    return 10;
   }
 
   function resolvePreloadSecs() {
@@ -388,13 +530,21 @@
   function applyPreloadSettings() {
     const isFull = getPreloadMode() === 'full';
     const secs = resolvePreloadSecs();
+    if (!isFull && secs <= STARTUP_CACHE_SECS) {
+      preloadBoostApplied = true;
+      return secs;
+    }
+
     sendMpvSetProp('cache-secs', secs);
     sendMpvSetProp('demuxer-readahead-secs', secs);
     if (isFull) {
       sendMpvSetProp('demuxer-max-bytes', '8GiB');
     } else if (secs >= 300) {
       sendMpvSetProp('demuxer-max-bytes', '1GiB');
+    } else if (secs > STARTUP_CACHE_SECS) {
+      sendMpvSetProp('demuxer-max-bytes', '500MiB');
     }
+    preloadBoostApplied = true;
     return secs;
   }
 
@@ -419,6 +569,8 @@
       sendMpvObserve('demuxer-cache-time');
     }
 
+    runPlaybackRecovery();
+    maybeBoostPreload();
     dispatchVideoEvent('progress');
   }
 
@@ -442,6 +594,12 @@
     lastSeekTarget = null;
     lastSeekAt = 0;
     mpvCacheAheadSec = 0;
+    mpvPause = false;
+    mpvPausedForCache = false;
+    currentStreamPath = '';
+    preloadBoostApplied = false;
+    recoveryMutedUntil = 0;
+    streamStartedAt = 0;
     shimVideo = null;
   }
 
@@ -481,44 +639,23 @@
   window.__stremioCustomPlaybackEnsure = ensurePlaybackApi;
 
   window.addEventListener('storage', (event) => {
-    if (event.key === 'stremio-custom-preload-secs') applyPreloadSettings();
-  });
-  document.addEventListener('stremio-custom-preload-changed', applyPreloadSettings);
-
-  let preloadApplyTimer = null;
-  function schedulePreloadApply() {
-    if (!isPlayerRoute()) return;
-    applyPreloadSettings();
-    if (preloadApplyTimer) return;
-    let attempts = 0;
-    preloadApplyTimer = window.setInterval(() => {
-      if (!isPlayerRoute()) {
-        window.clearInterval(preloadApplyTimer);
-        preloadApplyTimer = null;
-        return;
-      }
+    if (event.key === 'stremio-custom-preload-secs') {
+      preloadBoostApplied = false;
       applyPreloadSettings();
-      attempts += 1;
-      if (attempts >= 8) {
-        window.clearInterval(preloadApplyTimer);
-        preloadApplyTimer = null;
-      }
-    }, 1500);
-  }
+    }
+  });
+  document.addEventListener('stremio-custom-preload-changed', () => {
+    preloadBoostApplied = false;
+    applyPreloadSettings();
+  });
 
-  const originalEnsure = ensurePlaybackApi;
-  function ensurePlaybackApiWithPreload() {
-    originalEnsure();
-    if (isPlayerRoute()) schedulePreloadApply();
-  }
-
-  window.addEventListener('hashchange', ensurePlaybackApiWithPreload);
-  document.addEventListener('stremio-custom-playback-route', ensurePlaybackApiWithPreload);
-  document.addEventListener('stremio-custom-bootstrap-ready', ensurePlaybackApiWithPreload);
+  window.addEventListener('hashchange', ensurePlaybackApi);
+  document.addEventListener('stremio-custom-playback-route', ensurePlaybackApi);
+  document.addEventListener('stremio-custom-bootstrap-ready', ensurePlaybackApi);
 
   if (document.readyState !== 'loading') {
-    ensurePlaybackApiWithPreload();
+    ensurePlaybackApi();
   } else {
-    window.addEventListener('DOMContentLoaded', ensurePlaybackApiWithPreload);
+    window.addEventListener('DOMContentLoaded', ensurePlaybackApi);
   }
 })();

@@ -4,78 +4,129 @@
   if (window.__stremioCustomScrollRestore) return;
   window.__stremioCustomScrollRestore = true;
 
-  const RATIO_KEY = 'stremio-custom-board-scroll-ratio';
-  const ANCHOR_KEY = 'stremio-custom-board-scroll-anchor';
-  const SELECTED_ANCHOR_KEY = 'stremio-custom-board-selected-anchor';
+  const SCROLL_TOP_KEY = 'stremio-custom-board-scroll-top';
+  const RESET_TOP_KEY = 'stremio-custom-board-reset-top-on-return';
+  const LEFT_VIA_NAV_KEY = 'stremio-custom-board-left-via-nav';
 
-  let savedScrollRatio = 0;
-  let savedAnchorKey = '';
-  let savedSelectedAnchorKey = '';
+  const RESTORE_WINDOW_MS = 5000;
+
+  let savedScrollTop = 0;
   let lastHash = location.hash;
   let restoreUntil = 0;
   let userOverrodeRestore = false;
+  let programmaticScroll = false;
+  let restoreMode = null; // null | 'position' | 'top'
+  let pendingTimers = [];
+  let hashWatchTimer = null;
 
   function isBoardHash(hash) {
     const h = hash || '';
-    return !h || h === '#/' || h === '#' || h.includes('/board');
+    if (!h || h === '#/' || h === '#') return true;
+    if (h.includes('/board')) return true;
+    if (/^#\/?\?/.test(h)) return true;
+    return false;
   }
 
   function isBoardRoute() {
     return isBoardHash(location.hash);
   }
 
+  function getRoutePath(hash) {
+    const raw = String(hash || '').replace(/^#/, '');
+    const stripped = raw.startsWith('/') ? raw.slice(1) : raw;
+    const pathOnly = stripped.split('?')[0];
+    if (!pathOnly || pathOnly.includes('=')) return '';
+    return pathOnly;
+  }
+
+  function isDetailOrPlayerHash(hash) {
+    const path = getRoutePath(hash);
+    return path.startsWith('detail/') || path.startsWith('player');
+  }
+
+  function isOtherAppRoute(hash) {
+    if (isBoardHash(hash) || isDetailOrPlayerHash(hash)) return false;
+    const path = getRoutePath(hash);
+    return path.length > 0;
+  }
+
   function getBoardScrollEl() {
-    return document.querySelector('[class*="board-content"]');
+    const board = document.querySelector('[class*="board-container"]');
+    if (!board) return null;
+
+    const candidates = board.querySelectorAll('[class*="board-content"]');
+    for (const el of candidates) {
+      const overflowY = window.getComputedStyle(el).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        return el;
+      }
+    }
+
+    return board.querySelector('[class*="board-content-container"] [class*="board-content"]')
+      || document.querySelector('[class*="board-content"]');
   }
 
-  function getItemAnchorKey(item) {
-    if (!item) return '';
-    return (
-      item.getAttribute('href') ||
-      item.querySelector('a')?.getAttribute('href') ||
-      item.dataset?.id ||
-      item.textContent?.trim()?.slice(0, 80) ||
-      ''
-    );
+  function clearPendingTimers() {
+    for (const id of pendingTimers) {
+      clearTimeout(id);
+    }
+    pendingTimers = [];
   }
 
-  function getScrollRatio(el) {
-    if (!el) return 0;
-    const maxScroll = el.scrollHeight - el.clientHeight;
-    if (maxScroll <= 0) return 0;
-    return Math.max(0, Math.min(1, el.scrollTop / maxScroll));
+  function scheduleLater(fn, delay) {
+    const id = setTimeout(fn, delay);
+    pendingTimers.push(id);
+    return id;
+  }
+
+  function clearSavedPosition() {
+    savedScrollTop = 0;
+    try {
+      sessionStorage.setItem(SCROLL_TOP_KEY, '0');
+    } catch (_) {}
+  }
+
+  function shouldResetToTopOnReturn() {
+    try {
+      return sessionStorage.getItem(RESET_TOP_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  function setResetToTopOnReturn(enabled) {
+    try {
+      if (enabled) {
+        sessionStorage.setItem(RESET_TOP_KEY, 'true');
+      } else {
+        sessionStorage.removeItem(RESET_TOP_KEY);
+      }
+    } catch (_) {}
+  }
+
+  function scrollBoardToTop() {
+    const el = getBoardScrollEl();
+    if (el) setScrollTop(el, 0);
+    const routeContent = document.querySelector('[class*="route-content"]');
+    if (routeContent && routeContent !== el) setScrollTop(routeContent, 0);
+    window.scrollTo(0, 0);
   }
 
   function persistScroll(el) {
     if (!el) return;
-    savedScrollRatio = getScrollRatio(el);
-
-    const containerRect = el.getBoundingClientRect();
-    const items = el.querySelectorAll('[class*="meta-item"]');
-    for (const item of items) {
-      const rect = item.getBoundingClientRect();
-      if (rect.bottom > containerRect.top + 8 && rect.top < containerRect.bottom - 8) {
-        savedAnchorKey = getItemAnchorKey(item);
-        break;
-      }
-    }
-
+    savedScrollTop = Math.max(0, Math.round(el.scrollTop));
     try {
-      sessionStorage.setItem(RATIO_KEY, String(savedScrollRatio));
-      sessionStorage.setItem(ANCHOR_KEY, savedAnchorKey || '');
-      sessionStorage.setItem(SELECTED_ANCHOR_KEY, savedSelectedAnchorKey || '');
+      sessionStorage.setItem(SCROLL_TOP_KEY, String(savedScrollTop));
     } catch (_) {}
   }
 
   function loadPersistedScroll() {
     try {
-      const ratio = Number(sessionStorage.getItem(RATIO_KEY));
-      if (Number.isFinite(ratio) && ratio >= 0) {
-        savedScrollRatio = Math.max(0, Math.min(1, ratio));
-      }
-      savedAnchorKey = sessionStorage.getItem(ANCHOR_KEY) || '';
-      savedSelectedAnchorKey = sessionStorage.getItem(SELECTED_ANCHOR_KEY) || '';
-    } catch (_) {}
+      const value = Number(sessionStorage.getItem(SCROLL_TOP_KEY));
+      savedScrollTop = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+    } catch (_) {
+      savedScrollTop = 0;
+    }
   }
 
   function captureScroll() {
@@ -83,80 +134,112 @@
     persistScroll(getBoardScrollEl());
   }
 
-  function applyScrollRatio(el) {
-    if (!el || userOverrodeRestore) return;
-    const maxScroll = el.scrollHeight - el.clientHeight;
-    if (maxScroll <= 0) {
-      el.scrollTop = 0;
-      return;
-    }
-    el.scrollTop = Math.round(savedScrollRatio * maxScroll);
+  function setScrollTop(el, nextTop) {
+    programmaticScroll = true;
+    el.scrollTop = Math.max(0, Math.round(nextTop));
+    requestAnimationFrame(() => {
+      programmaticScroll = false;
+    });
   }
 
-  function restoreByAnchor(el) {
-    if (!el || userOverrodeRestore) return false;
-    const preferred = savedSelectedAnchorKey || savedAnchorKey;
-    if (!preferred) return false;
-    const items = el.querySelectorAll('[class*="meta-item"]');
-    for (const item of items) {
-      if (getItemAnchorKey(item) === preferred) {
-        item.scrollIntoView({ block: 'center', behavior: 'instant' in window ? 'instant' : 'auto' });
-        return true;
-      }
-    }
-    return false;
+  function applyScrollTop(el) {
+    if (!el || userOverrodeRestore) return;
+    setScrollTop(el, savedScrollTop);
+  }
+
+  function isRestoreSessionActive() {
+    return restoreMode !== null && Date.now() <= restoreUntil && !userOverrodeRestore;
   }
 
   function cancelRestore() {
     userOverrodeRestore = true;
+    restoreMode = null;
     restoreUntil = 0;
+    clearPendingTimers();
     window.__stremioCustomScrollRestoreActive = false;
   }
 
+  function hasSavedPosition() {
+    return savedScrollTop > 0;
+  }
+
+  function applyActiveRestore(el) {
+    if (!el || !isRestoreSessionActive()) return;
+    if (restoreMode === 'top') {
+      scrollBoardToTop();
+      return;
+    }
+    applyScrollTop(el);
+  }
+
   function restoreScroll(attempt) {
-    if (!isBoardRoute() || userOverrodeRestore) return;
-    if (Date.now() > restoreUntil && attempt > 8) return;
+    if (!isBoardRoute() || !isRestoreSessionActive()) return;
+    if (Date.now() > restoreUntil && attempt > 12) return;
 
     const el = getBoardScrollEl();
     if (!el) {
-      if (attempt < 60) {
-        setTimeout(() => restoreScroll(attempt + 1), 40 + attempt * 15);
+      if (attempt < 80 && isRestoreSessionActive()) {
+        scheduleLater(() => restoreScroll(attempt + 1), 40 + attempt * 12);
       }
       return;
     }
 
     window.__stremioCustomScrollRestoreActive = true;
-
-    if (!restoreByAnchor(el)) {
-      applyScrollRatio(el);
-    }
+    applyActiveRestore(el);
 
     requestAnimationFrame(() => {
-      if (userOverrodeRestore) return;
-      if (!restoreByAnchor(el)) {
-        applyScrollRatio(el);
-      }
-      if (attempt < 30 && Date.now() <= restoreUntil) {
-        setTimeout(() => restoreScroll(attempt + 1), 60 + attempt * 40);
+      if (!isRestoreSessionActive()) return;
+      applyActiveRestore(el);
+      if (attempt < 40 && Date.now() <= restoreUntil) {
+        scheduleLater(() => restoreScroll(attempt + 1), 50 + attempt * 35);
       }
     });
   }
 
-  function scheduleRestore() {
+  function beginRestoreSession(mode) {
+    clearPendingTimers();
     userOverrodeRestore = false;
-    if (savedScrollRatio < 0.02 && !savedAnchorKey && !savedSelectedAnchorKey) {
+    restoreMode = mode;
+    restoreUntil = Date.now() + RESTORE_WINDOW_MS;
+    window.__stremioCustomScrollRestoreActive = true;
+
+    scheduleLater(() => {
+      restoreMode = null;
+      restoreUntil = 0;
       window.__stremioCustomScrollRestoreActive = false;
+    }, RESTORE_WINDOW_MS + 200);
+  }
+
+  function scheduleScrollToTop() {
+    beginRestoreSession('top');
+    const delays = [0, 50, 120, 250, 400, 700, 1100, 1600, 2200, 3000];
+    for (const delay of delays) {
+      scheduleLater(() => {
+        if (!isRestoreSessionActive() || restoreMode !== 'top') return;
+        scrollBoardToTop();
+      }, delay);
+    }
+    restoreScroll(0);
+  }
+
+  function scheduleRestore() {
+    if (shouldResetToTopOnReturn()) {
+      setResetToTopOnReturn(false);
+      clearSavedPosition();
+      scheduleScrollToTop();
       return;
     }
 
-    restoreUntil = Date.now() + 2500;
-    window.__stremioCustomScrollRestoreActive = true;
+    if (!hasSavedPosition()) {
+      cancelRestore();
+      return;
+    }
+
+    beginRestoreSession('position');
     restoreScroll(0);
-    setTimeout(() => restoreScroll(10), 300);
-    setTimeout(() => restoreScroll(20), 900);
-    setTimeout(() => {
-      window.__stremioCustomScrollRestoreActive = false;
-    }, 2600);
+    scheduleLater(() => restoreScroll(12), 350);
+    scheduleLater(() => restoreScroll(24), 900);
+    scheduleLater(() => restoreScroll(32), 1800);
   }
 
   function ensureBoardObserver() {
@@ -165,17 +248,50 @@
     el.__stremioCustomScrollObserved = true;
 
     const observer = new MutationObserver(() => {
-      if (!isBoardRoute() || Date.now() > restoreUntil || userOverrodeRestore) return;
-      if (!restoreByAnchor(el)) {
-        applyScrollRatio(el);
-      }
+      if (!isRestoreSessionActive()) return;
+      const currentEl = getBoardScrollEl();
+      if (!currentEl) return;
+      applyActiveRestore(currentEl);
     });
     observer.observe(el, { childList: true, subtree: true });
   }
 
   function onUserScrollIntent() {
-    if (!isBoardRoute()) return;
+    if (!isBoardRoute() || programmaticScroll) return;
     cancelRestore();
+  }
+
+  function onRouteChange() {
+    const prevHash = lastHash;
+    const nextHash = location.hash;
+
+    if (isBoardHash(prevHash) && !shouldResetToTopOnReturn()) {
+      if (isDetailOrPlayerHash(nextHash)) {
+        captureScroll();
+      } else if (isOtherAppRoute(nextHash)) {
+        try {
+          sessionStorage.setItem(LEFT_VIA_NAV_KEY, 'true');
+        } catch (_) {}
+      }
+    }
+
+    lastHash = nextHash;
+
+    if (isBoardRoute()) {
+      try {
+        if (sessionStorage.getItem(LEFT_VIA_NAV_KEY) === 'true') {
+          sessionStorage.removeItem(LEFT_VIA_NAV_KEY);
+          setResetToTopOnReturn(true);
+          clearSavedPosition();
+        }
+      } catch (_) {}
+
+      loadPersistedScroll();
+      ensureBoardObserver();
+      scheduleRestore();
+    } else {
+      cancelRestore();
+    }
   }
 
   document.addEventListener('wheel', onUserScrollIntent, { capture: true, passive: true });
@@ -192,14 +308,8 @@
     (event) => {
       if (!isBoardRoute()) return;
       const target = event.target;
-      if (target && String(target.className || '').includes('board-content')) {
-        if (Date.now() <= restoreUntil && !userOverrodeRestore) {
-          const maxScroll = target.scrollHeight - target.clientHeight;
-          const targetTop = Math.round(savedScrollRatio * maxScroll);
-          if (Math.abs(target.scrollTop - targetTop) > 24) {
-            onUserScrollIntent();
-          }
-        }
+      if (!target || !String(target.className || '').includes('board-content')) return;
+      if (!programmaticScroll && !isRestoreSessionActive()) {
         persistScroll(target);
       }
     },
@@ -210,45 +320,55 @@
     'click',
     (event) => {
       if (!isBoardRoute()) return;
-      const metaItem = event.target?.closest?.('[class*="meta-item"]');
-      if (metaItem) {
-        savedSelectedAnchorKey = getItemAnchorKey(metaItem);
-        try {
-          sessionStorage.setItem(SELECTED_ANCHOR_KEY, savedSelectedAnchorKey || '');
-        } catch (_) {}
-        const el = getBoardScrollEl();
-        if (el) persistScroll(el);
+
+      const heroAction = event.target?.closest?.('.hero-overlay-button-watch, .hero-overlay-button');
+      if (heroAction) {
+        setResetToTopOnReturn(false);
+        captureScroll();
+        return;
       }
+
+      const metaItem = event.target?.closest?.('[class*="meta-item"]');
+      if (!metaItem) return;
+
+      setResetToTopOnReturn(false);
+      captureScroll();
     },
     true
   );
 
-  window.addEventListener('hashchange', () => {
-    if (isBoardHash(lastHash)) {
-      captureScroll();
-    }
-    lastHash = location.hash;
-    if (isBoardRoute()) {
+  window.addEventListener('hashchange', onRouteChange);
+  window.addEventListener('popstate', onRouteChange);
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted && isBoardRoute()) {
       loadPersistedScroll();
       ensureBoardObserver();
       scheduleRestore();
-    } else {
-      cancelRestore();
     }
   });
 
-  window.addEventListener('popstate', () => {
-    if (isBoardRoute()) {
-      loadPersistedScroll();
-      ensureBoardObserver();
-      scheduleRestore();
-    }
+  document.addEventListener('stremio-custom-hero-layout-changed', () => {
+    if (!isBoardRoute() || !isRestoreSessionActive()) return;
+    const el = getBoardScrollEl();
+    if (!el) return;
+    applyActiveRestore(el);
   });
+
+  hashWatchTimer = window.setInterval(() => {
+    if (location.hash !== lastHash) {
+      onRouteChange();
+    }
+  }, 250);
 
   loadPersistedScroll();
   if (isBoardRoute()) {
     ensureBoardObserver();
   }
 
-  console.info('[StremioCustom] Board scroll restore active.');
+  window.StremioCustomScrollRestore = {
+    captureScroll,
+    persistScroll,
+  };
+
+  console.info('[StremioCustom] Board scroll restore active (exact position).');
 })();

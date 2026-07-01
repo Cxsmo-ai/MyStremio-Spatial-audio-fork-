@@ -9,6 +9,9 @@
   const OVERLAY_ID = 'stremio-custom-cinebye-overlay';
   const STYLE_ID = 'stremio-custom-cinebye-addons-style';
 
+  let injectTimer = null;
+  let addonsRetryTimer = null;
+
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement('style');
@@ -150,21 +153,6 @@
     frame.allow = 'clipboard-read; clipboard-write';
     frame.src = await buildCinebyeUrl();
 
-    let blocked = false;
-    frame.addEventListener('error', () => {
-      blocked = true;
-    });
-
-    window.setTimeout(() => {
-      if (blocked) return;
-      try {
-        const doc = frame.contentDocument;
-        if (!doc) return;
-      } catch (_) {
-        return;
-      }
-    }, 2500);
-
     overlay.append(top, frame);
     overlay.addEventListener('click', (event) => {
       if (event.target === overlay) closeOverlay();
@@ -177,15 +165,30 @@
     return /#\/addons(?:[/?#]|$)/.test(location.hash || '');
   }
 
-  function injectAddonsButton() {
-    if (!isAddonsPage()) return;
+  function findAddonsActionBar() {
+    const addonsRoot = document.querySelector('[class*="addons-container"]');
+    if (!addonsRoot) return null;
 
-    const inputsContainer = document.querySelector('[class*="selectable-inputs-container"]');
+    const inputsContainer = addonsRoot.querySelector('[class*="selectable-inputs-container"]');
+    if (!inputsContainer) return null;
+
     const spacingDiv =
-      inputsContainer?.querySelector('[class*="spacing"]') ||
-      document.querySelector('[class*="addons-list-container"] [class*="spacing"]');
-    if (!spacingDiv) return;
+      inputsContainer.querySelector('[class*="spacing"]') ||
+      addonsRoot.querySelector('[class*="addons-list-container"] [class*="spacing"]');
 
+    if (!spacingDiv) return null;
+    return { addonsRoot, inputsContainer, spacingDiv };
+  }
+
+  function injectAddonsButton() {
+    if (!isAddonsPage()) return false;
+
+    const actionBar = findAddonsActionBar();
+    if (!actionBar) return false;
+
+    ensureStyles();
+
+    const { spacingDiv } = actionBar;
     let button = document.getElementById(BUTTON_ID);
     if (!button) {
       button = document.createElement('button');
@@ -208,19 +211,57 @@
     if (!spacingDiv.contains(button)) {
       spacingDiv.insertBefore(button, spacingDiv.firstChild);
     }
+
+    return true;
+  }
+
+  function stopAddonsRetry() {
+    if (!addonsRetryTimer) return;
+    clearInterval(addonsRetryTimer);
+    addonsRetryTimer = null;
+  }
+
+  function startAddonsRetry() {
+    stopAddonsRetry();
+    if (!isAddonsPage()) return;
+
+    let attempts = 0;
+    addonsRetryTimer = window.setInterval(() => {
+      if (!isAddonsPage()) {
+        stopAddonsRetry();
+        return;
+      }
+      if (injectAddonsButton() || attempts >= 30) {
+        stopAddonsRetry();
+        return;
+      }
+      attempts += 1;
+    }, 250);
   }
 
   function scheduleInject() {
-    if (!isAddonsPage()) {
-      closeOverlay();
-      return;
-    }
-    injectAddonsButton();
+    if (injectTimer) clearTimeout(injectTimer);
+    injectTimer = setTimeout(() => {
+      injectTimer = null;
+      if (!isAddonsPage()) {
+        closeOverlay();
+        stopAddonsRetry();
+        return;
+      }
+      if (!injectAddonsButton()) {
+        startAddonsRetry();
+      }
+    }, 120);
   }
+
+  window.__stremioCustomCinebyeAddonsEnsure = scheduleInject;
 
   ensureStyles();
   window.addEventListener('hashchange', scheduleInject);
-  const observer = new MutationObserver(() => scheduleInject());
+  window.addEventListener('popstate', scheduleInject);
+  document.addEventListener('stremio-custom-bootstrap-ready', scheduleInject);
+
+  const observer = new MutationObserver(scheduleInject);
   const observeTarget = () => {
     const root = document.body || document.documentElement;
     if (!root) {
@@ -236,5 +277,8 @@
     openCinebyeInApp,
     closeOverlay,
     buildCinebyeUrl,
+    scheduleInject,
   };
+
+  console.info('[StremioCustom] Cinebye addon manager ready.');
 })();

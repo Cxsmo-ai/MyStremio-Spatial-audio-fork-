@@ -3,7 +3,7 @@
  * @description Enriches movie and TV show details with TMDB data including enhanced cast, similar titles, collections, and ratings.
  * @version 2.0.0
  * @category metadata
- * @author MrBlu03
+ * @author MrBlu03 edited by MyStremio
  */
 
 (() => {
@@ -22,6 +22,15 @@
         SHOW_COLLECTION: 'showCollection',
         POSTER_RATINGS: 'showRatingsOnPosters',
     };
+
+    function escapeHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
 
     function getDefaultConfig() {
         return {
@@ -607,16 +616,16 @@
                     <button class="enhanced-scroll-btn enhanced-scroll-left" aria-label="Scroll left">‹</button>
                     <div class="enhanced-cast-container enhanced-scroll-container">
                         ${cast.map(actor => `
-                            <div class="enhanced-cast-item">
+                            <div class="enhanced-cast-item" data-actor-name="${escapeHtml(actor.name)}">
                                 <div class="enhanced-cast-image-container">
                                     ${actor.profile_path 
-                                        ? `<img class="enhanced-cast-image" src="https://image.tmdb.org/t/p/w185${actor.profile_path}" alt="${actor.name}" loading="lazy">`
+                                        ? `<img class="enhanced-cast-image" src="https://image.tmdb.org/t/p/w185${actor.profile_path}" alt="${escapeHtml(actor.name)}" loading="lazy">`
                                         : `<div class="enhanced-cast-placeholder"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>`
                                     }
                                 </div>
                                 <div class="enhanced-cast-info">
-                                    <div class="enhanced-cast-name">${actor.name}</div>
-                                    <div class="enhanced-cast-character">${actor.character || ''}</div>
+                                    <div class="enhanced-cast-name">${escapeHtml(actor.name)}</div>
+                                    <div class="enhanced-cast-character">${escapeHtml(actor.character || '')}</div>
                                 </div>
                             </div>
                         `).join('')}
@@ -627,6 +636,7 @@
             
             container.appendChild(section);
             this.setupScrollButtons(section);
+            this.setupCastClickHandlers(section);
         }
 
         injectSimilarTitles(similar, container) {
@@ -725,6 +735,19 @@
             
             container.addEventListener('scroll', updateButtonVisibility);
             setTimeout(updateButtonVisibility, 100);
+        }
+
+        setupCastClickHandlers(section) {
+            section.querySelectorAll('.enhanced-cast-item').forEach((item) => {
+                item.style.cursor = 'pointer';
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const name = item.dataset.actorName;
+                    if (!name) return;
+                    window.location.hash = `#/search?search=${encodeURIComponent(name)}`;
+                });
+            });
         }
 
         setupPosterClickHandlers(section) {

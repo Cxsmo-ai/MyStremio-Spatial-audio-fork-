@@ -127,6 +127,8 @@ Ensure-MpvImportLib -Arch $Target
 $VcVars = Get-VcVarsBat
 $TargetDir = Join-Path $ProjectRoot "target"
 
+& (Join-Path $ProjectRoot "scripts\build-webui.ps1")
+
 $BuildCmd = @(
     "call `"$VcVars`"",
     "set PATH=%USERPROFILE%\.cargo\bin;%PATH%",

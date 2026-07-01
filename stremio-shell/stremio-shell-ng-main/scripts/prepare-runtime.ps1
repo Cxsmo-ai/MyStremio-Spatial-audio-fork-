@@ -78,6 +78,22 @@ if (-not (Test-Path $ServerJs)) {
 }
 Copy-Item -Path $ServerJs -Destination (Join-Path $OutputDir "server.js") -Force
 
+$WebUiServerJs = Join-Path $ProjectRoot "webui-server.js"
+if (Test-Path $WebUiServerJs) {
+    Copy-Item -Path $WebUiServerJs -Destination (Join-Path $OutputDir "webui-server.js") -Force
+}
+
+$WebUiDir = Join-Path $ProjectRoot "webui"
+if (Test-Path $WebUiDir) {
+    $WebUiOut = Join-Path $OutputDir "webui"
+    if (Test-Path $WebUiOut) {
+        Remove-Item $WebUiOut -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $WebUiOut -Force | Out-Null
+    Copy-Item -Path (Join-Path $WebUiDir "*") -Destination $WebUiOut -Recurse -Force
+    Write-Host "Copied local web UI to $WebUiOut"
+}
+
 # libmpv DLL: build.rs extracts/copies it to project root during cargo build.
 $LibMpvCandidates = @(
     (Join-Path $ProjectRoot "libmpv-2.dll"),

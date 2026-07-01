@@ -24,6 +24,67 @@ pub fn themes_dir() -> PathBuf {
     app_data_dir().join("themes")
 }
 
+pub fn webview_user_data_dir() -> PathBuf {
+    app_data_dir().join("WebView2")
+}
+
+pub fn ensure_webview_user_data_dir() {
+    let target = webview_user_data_dir();
+    migrate_legacy_webview_user_data(&target);
+    let _ = fs::create_dir_all(&target);
+}
+
+fn migrate_legacy_webview_user_data(target: &Path) {
+    if dir_has_entries(target) {
+        return;
+    }
+
+    let Some(exe_dir) = env::current_exe()
+        .ok()
+        .and_then(|mut path| {
+            path.pop();
+            Some(path)
+        })
+    else {
+        return;
+    };
+
+    for legacy in [
+        exe_dir.join("mystremio-shell.exe.WebView2"),
+        exe_dir.join("stremio-shell.exe.WebView2"),
+        exe_dir.join("Stremio.exe.WebView2"),
+    ] {
+        if legacy.is_dir() {
+            let _ = copy_dir_recursive(&legacy, target);
+            break;
+        }
+    }
+}
+
+fn dir_has_entries(path: &Path) -> bool {
+    fs::read_dir(path)
+        .ok()
+        .is_some_and(|mut entries| entries.next().is_some())
+}
+
+fn copy_dir_recursive(source: &Path, target: &Path) -> std::io::Result<()> {
+    if !source.is_dir() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)?.flatten() {
+        let from = entry.path();
+        let to = target.join(entry.file_name());
+        if from.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            let _ = fs::copy(&from, &to);
+        }
+    }
+    Ok(())
+}
+
 pub fn bundled_root() -> PathBuf {
     env::current_exe()
         .ok()

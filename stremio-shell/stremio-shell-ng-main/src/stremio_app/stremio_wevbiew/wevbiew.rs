@@ -1,4 +1,5 @@
 use crate::stremio_app::constants::SERVER_IPC_KEY;
+use crate::stremio_app::custom_api::webview_user_data_dir;
 use crate::stremio_app::ipc;
 use native_windows_gui::{self as nwg, PartialUi};
 use once_cell::unsync::OnceCell;
@@ -82,7 +83,11 @@ impl PartialUi for WebView {
         let controller_clone = data.controller.clone();
         let endpoint = data.endpoint.clone();
         let dev_tools = data.dev_tools.clone();
-        let webview_flags = "--autoplay-policy=no-user-gesture-required --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+        let webview_flags = concat!(
+            "--autoplay-policy=no-user-gesture-required ",
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,",
+            "OverlayScrollbar,msOverlayScrollbarWinStyle,msOverlayScrollbarWinStyleAnimation"
+        );
         const CINEBYE_AUTO_LOGIN_SCRIPT: &str = r#"
 (function () {
   try {
@@ -113,8 +118,10 @@ impl PartialUi for WebView {
   } catch (_) {}
 })();
 "#;
+        let user_data_folder = webview_user_data_dir();
         let result = webview2::EnvironmentBuilder::new()
             .with_additional_browser_arguments(webview_flags)
+            .with_user_data_folder(&user_data_folder)
             .build(move |env| {
                 let env = env.expect("Cannot obtain webview environment");
                 env.create_controller(hwnd, move |controller| {
@@ -227,10 +234,12 @@ impl PartialUi for WebView {
                             for script in [
                                 include_str!("../../../assets/custom_bootstrap.js"),
                                 include_str!("../../../assets/custom_scroll_restore.js"),
+                                include_str!("../../../assets/custom_scrollbar.js"),
                                 include_str!("../../../assets/custom_player_glass.js"),
                                 include_str!("../../../assets/custom_player_loading.js"),
                                 include_str!("../../../assets/custom_liquid_glass_nav.js"),
                                 include_str!("../../../assets/custom_deep_link.js"),
+                                include_str!("../../../assets/custom_continue_watching_play.js"),
                                 include_str!("../../../assets/custom_audio_sync.js"),
                                 include_str!("../../../assets/custom_subtitle_sync.js"),
                                 include_str!("../../../assets/custom_favorite_languages_page.js"),
@@ -240,6 +249,7 @@ impl PartialUi for WebView {
                                 include_str!("../../../assets/custom_cinebye_addons.js"),
                                 include_str!("../../../assets/custom_discord_presence.js"),
                                 include_str!("../../../assets/custom_settings_ui.js"),
+                                include_str!("../../../assets/custom_api_key_settings.js"),
                                 include_str!("../../../assets/custom_playback_bootstrap.js"),
                                 include_str!("../../../assets/custom_stream_cache.js"),
                                 include_str!("../../../assets/custom_playback_api.js"),
@@ -250,7 +260,7 @@ impl PartialUi for WebView {
                             }
 
                             wv.execute_script(
-                                r#"try{if(document.readyState!=='loading'&&window.runBootstrapOnce)window.runBootstrapOnce();if(window.__stremioCustomPlayerGlassEnsure)window.__stremioCustomPlayerGlassEnsure();if(window.__stremioCustomPlayerLoadingEnsure)window.__stremioCustomPlayerLoadingEnsure();if(window.__stremioCustomPlayerTransparencyEnsure)window.__stremioCustomPlayerTransparencyEnsure();if(window.__stremioCustomPlaybackEnsure)window.__stremioCustomPlaybackEnsure();if(window.__stremioCustomAudioSyncEnsure)window.__stremioCustomAudioSyncEnsure();if(window.__stremioCustomSubtitleSyncEnsure)window.__stremioCustomSubtitleSyncEnsure();if(window.__stremioCustomLibraryFoldersEnsure)window.__stremioCustomLibraryFoldersEnsure();}catch(e){console.error('[StremioCustom] post-inject failed',e);}"#,
+                                r#"try{if(document.readyState!=='loading'&&window.runBootstrapOnce)window.runBootstrapOnce();if(window.__stremioCustomPlayerGlassEnsure)window.__stremioCustomPlayerGlassEnsure();if(window.__stremioCustomPlayerLoadingEnsure)window.__stremioCustomPlayerLoadingEnsure();if(window.__stremioCustomPlayerTransparencyEnsure)window.__stremioCustomPlayerTransparencyEnsure();if(window.__stremioCustomPlaybackEnsure)window.__stremioCustomPlaybackEnsure();if(window.__stremioCustomAudioSyncEnsure)window.__stremioCustomAudioSyncEnsure();if(window.__stremioCustomSubtitleSyncEnsure)window.__stremioCustomSubtitleSyncEnsure();if(window.__stremioCustomLibraryFoldersEnsure)window.__stremioCustomLibraryFoldersEnsure();if(window.__stremioCustomCinebyeAddonsEnsure)window.__stremioCustomCinebyeAddonsEnsure();if(window.__stremioCustomApiKeySettingsEnsure)window.__stremioCustomApiKeySettingsEnsure();if(window.__stremioCustomScrollbarEnsure)window.__stremioCustomScrollbarEnsure();}catch(e){console.error('[StremioCustom] post-inject failed',e);}"#,
                                 |_| Ok(()),
                             )
                             .ok();

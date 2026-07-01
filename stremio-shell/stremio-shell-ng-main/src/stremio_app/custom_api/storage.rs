@@ -444,6 +444,13 @@ fn normalize_preferences(value: Value) -> Value {
                 "defaultsApplied": false
             })
         });
+    let auth_profile = value
+        .get("authProfile")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_default();
 
     json!({
         "enabledPlugins": enabled,
@@ -454,7 +461,8 @@ fn normalize_preferences(value: Value) -> Value {
         "discordPresence": discord_presence,
         "library": library,
         "language": language,
-        "onboarding": onboarding
+        "onboarding": onboarding,
+        "authProfile": auth_profile
     })
 }
 

@@ -26,7 +26,7 @@
  * @name Context Menu Fix
  * @description Fixes context menus appearing behind UI elements by moving them to the document root.
  * @version 2.0.0
- * @author MrBlu03
+ * @author MrBlu03 edited by MyStremio
  */
 class ContextMenuFix {
     constructor() {

@@ -40,6 +40,11 @@
           console.error('[StremioCustom] settings callback failed', error);
         }
       });
+      if (data.id != null && pending.has(data.id)) {
+        const entry = pending.get(data.id);
+        pending.delete(data.id);
+        entry.resolve(data.result ?? true);
+      }
       return;
     }
     if (data.id == null) return;
@@ -120,16 +125,65 @@
   window.StremioCustomAPI = api;
   window.StremioEnhancedAPI = api;
 
+  function readAuthProfileSnapshot() {
+    try {
+      const raw = localStorage.getItem('profile');
+      if (!raw) return '';
+      const parsed = JSON.parse(raw);
+      return parsed?.auth?.key ? raw : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function restoreAuthProfileFromDisk(authProfile) {
+    if (typeof authProfile !== 'string' || !authProfile.trim()) return false;
+    try {
+      const parsed = JSON.parse(authProfile);
+      if (!parsed?.auth?.key) return false;
+      const existing = localStorage.getItem('profile');
+      if (existing) {
+        const current = JSON.parse(existing);
+        if (current?.auth?.key) return false;
+      }
+      localStorage.setItem('profile', authProfile);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  let authProfileSyncTimer = null;
+  let lastPersistedAuthProfile = '';
+
+  function scheduleAuthProfilePersistence() {
+    const sync = () => {
+      const snapshot = readAuthProfileSnapshot();
+      if (!snapshot || snapshot === lastPersistedAuthProfile) return;
+      lastPersistedAuthProfile = snapshot;
+      persistUserPreferences();
+    };
+
+    window.addEventListener('storage', sync);
+    window.setTimeout(sync, 2500);
+    window.setTimeout(sync, 10000);
+    if (authProfileSyncTimer) window.clearInterval(authProfileSyncTimer);
+    authProfileSyncTimer = window.setInterval(sync, 30000);
+  }
+
   function persistUserPreferences() {
+    const authProfile = readAuthProfileSnapshot();
+    if (authProfile) lastPersistedAuthProfile = authProfile;
     api.saveUserPreferences({
       enabledPlugins: getEnabledPlugins(),
-      currentTheme: getCurrentTheme(),
+      currentTheme: LIQUID_GLASS_THEME,
       autoskip: getAutoskipPreferences(),
       metadataAddon: getMetadataAddon(),
       language: getLanguagePreferences(),
       preload: getPreloadPreference(),
       discordPresence: getDiscordPresencePreferences(),
       library: getLibraryPreferences(),
+      authProfile,
       onboarding: {
         tmdbNoticeShown: localStorage.getItem(TMDB_NOTICE_KEY) === 'true',
         defaultsApplied: localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true',
@@ -141,6 +195,7 @@
     intro: 'stremio-custom-autoskip-intro',
     credits: 'stremio-custom-autoskip-credits',
     recap: 'stremio-custom-autoskip-recap',
+    preview: 'stremio-custom-autoskip-preview',
   };
 
   const LIQUID_GLASS_THEME = 'liquid-glass.theme.css';
@@ -164,26 +219,71 @@
   };
   const TMDB_NOTICE_KEY = 'stremio-custom-tmdb-notice-shown-v211d';
   const DEFAULTS_APPLIED_KEY = 'stremio-custom-defaults-applied-v211a';
-  const DEFAULT_PLUGIN_PATTERNS = [
-    /context[-_ ]?menu[-_ ]?fix/i,
-    /enhanced[-_ ]?covers/i,
-    /enhanced[-_ ]?title(?:bar)?/i,
-    /dynamic[-_ ]?hero/i,
-    /hero[-_ ]?div/i,
-    /data[-_ ]?enrichment/i,
-    /meta[-_ ]?hover/i,
-  ];
-  const REMOVED_PLUGIN_BASENAMES = new Set([
-    'picture-in-picture.plugin.js',
-    'filter-streams.plugin.js',
-    'enhancements-tweaks.plugin.js',
-    'horizontal-navigation.plugin.js',
-    'card-hover-info.plugin.js',
-    'playback-preview.plugin.js',
-    'trending-anime.plugin.js',
-  ]);
+  const DEFAULT_DISABLED_PLUGIN_PATTERNS = [/slash[-_ ]?to[-_ ]?search/i];
+  const DYNAMIC_HERO_PLUGIN = 'interface/hero-div.plugin.js';
+  const DYNAMIC_HERO_ENABLED_KEY = 'mystremio_dynamic_hero_enabled_v1';
+  const DYNAMIC_HERO_METADATA = {
+    name: 'Dynamic Hero',
+    version: '26.2.0',
+    author: 'MyStremio',
+    description: 'Rotating hero banner on the board with featured titles.',
+    category: 'interface',
+  };
 
-  let autoskipCache = { intro: false, credits: false, recap: false };
+  function isHeroPluginRef(fileRef) {
+    const normalized = String(fileRef || '').replace(/\\/g, '/');
+    const baseName = normalized.split('/').pop() || '';
+    return /hero[-_]?div\.plugin\.js$/i.test(normalized) || /hero[-_]?div\.plugin\.js$/i.test(baseName);
+  }
+
+  function cleanupLegacyHeroDom() {
+    if (window.__MYSTREMIO_REACT_HERO__) {
+      document.getElementById('mystremio-hero-layout-styles')?.remove();
+      if (window.heroObserver) {
+        try {
+          window.heroObserver.disconnect();
+        } catch (_) {}
+        delete window.heroObserver;
+      }
+      return;
+    }
+
+    document.querySelectorAll('.mystremio-hero-slot').forEach((node) => node.remove());
+    document.getElementById('mystremio-hero-layout-styles')?.remove();
+    if (window.heroObserver) {
+      try {
+        window.heroObserver.disconnect();
+      } catch (_) {}
+      delete window.heroObserver;
+    }
+    delete window.__MYSTREMIO_REACT_HERO__;
+    document.dispatchEvent(new CustomEvent('stremio-custom-hero-layout-changed'));
+  }
+
+  function isDynamicHeroEnabled() {
+    return localStorage.getItem(DYNAMIC_HERO_ENABLED_KEY) !== '0';
+  }
+
+  function syncDynamicHeroEnabledFlag(plugins = getEnabledPlugins()) {
+    if (!isDynamicHeroEnabled()) {
+      cleanupLegacyHeroDom();
+      return false;
+    }
+    return true;
+  }
+
+  api.listPlugins = async () => {
+    const plugins = await invoke('list-plugins');
+    if (!Array.isArray(plugins)) return plugins;
+    if (plugins.some((ref) => isHeroPluginRef(ref))) return plugins;
+    return [...plugins, DYNAMIC_HERO_PLUGIN];
+  };
+
+  api.getMetadata = async (path) => {
+    if (isHeroPluginRef(path)) return DYNAMIC_HERO_METADATA;
+    return invoke('get-metadata', { path });
+  };
+  let autoskipCache = { intro: false, credits: false, recap: false, preview: false };
   let autoskipReady = false;
   let autoskipReadyPromise = null;
 
@@ -307,7 +407,7 @@
 
   function getPreloadPreference() {
     const value = localStorage.getItem(PRELOAD_SECS_KEY);
-    return value ? String(value) : '120';
+    return value ? String(value) : '10';
   }
 
   function applyPreloadPreference(value) {
@@ -371,11 +471,7 @@
   }
 
   function removeHorizontalNavPluginFromEnabled() {
-    const enabled = getEnabledPlugins();
-    const next = enabled.filter((pluginRef) => !String(pluginRef || '').includes('horizontal-navigation'));
-    if (next.length === enabled.length) return;
-    setEnabledPlugins(next);
-    unloadPlugin(HORIZONTAL_NAV_PLUGIN);
+    // Phase 2: Horizontal navigation is always active in Glass mode.
   }
 
   function getEnabledPlugins() {
@@ -388,6 +484,19 @@
 
   function setEnabledPlugins(plugins) {
     localStorage.setItem('enabledPlugins', JSON.stringify(plugins));
+    const heroInList = isPluginEnabled(DYNAMIC_HERO_PLUGIN, plugins);
+    const defaultsApplied = localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true';
+    if (heroInList) {
+      localStorage.setItem(DYNAMIC_HERO_ENABLED_KEY, '1');
+    } else if (defaultsApplied || plugins.some((ref) => !isHeroPluginRef(ref))) {
+      localStorage.setItem(DYNAMIC_HERO_ENABLED_KEY, '0');
+    }
+    syncDynamicHeroEnabledFlag(plugins);
+    document.dispatchEvent(
+      new CustomEvent('stremio-custom-enabled-plugins-changed', {
+        detail: { enabledPlugins: plugins },
+      })
+    );
     persistUserPreferences();
   }
 
@@ -396,7 +505,7 @@
   }
 
   function setCurrentTheme(theme) {
-    localStorage.setItem('currentTheme', theme || '');
+    localStorage.setItem('currentTheme', LIQUID_GLASS_THEME);
     persistUserPreferences();
   }
 
@@ -492,8 +601,47 @@
     });
   }
 
+  async function disablePlugin(fileRef) {
+    if (isHeroPluginRef(fileRef)) {
+      const next = getEnabledPlugins().filter((ref) => !isHeroPluginRef(ref));
+      setEnabledPlugins(next);
+      return;
+    }
+    const next = getEnabledPlugins().filter((ref) => !isPluginEnabled(fileRef, [ref]));
+    setEnabledPlugins(next);
+    await unloadPluginResolved(fileRef);
+    await ensurePluginsLoadedForRoute();
+  }
+
+  async function enablePlugin(fileRef) {
+    const enabled = getEnabledPlugins();
+    const resolved = await resolvePluginRef(fileRef);
+    if (!resolved) return false;
+    if (isHeroPluginRef(resolved)) {
+      if (!isPluginEnabled(resolved, enabled)) {
+        setEnabledPlugins([...enabled, resolved]);
+      } else {
+        localStorage.setItem(DYNAMIC_HERO_ENABLED_KEY, '1');
+        syncDynamicHeroEnabledFlag([...enabled, resolved]);
+        persistUserPreferences();
+        document.dispatchEvent(
+          new CustomEvent('stremio-custom-enabled-plugins-changed', {
+            detail: { enabledPlugins: [...enabled, resolved] },
+          })
+        );
+      }
+      return true;
+    }
+    if (!isPluginEnabled(resolved, enabled)) {
+      setEnabledPlugins([...enabled, resolved]);
+    }
+    await loadPlugin(fileRef);
+    await ensurePluginsLoadedForRoute();
+    return true;
+  }
+
   function mergeAutoskipPreferences(diskAutoskip, localAutoskip) {
-    const ids = ['intro', 'credits', 'recap'];
+    const ids = ['intro', 'credits', 'recap', 'preview'];
     const merged = {};
     for (const id of ids) {
       if (diskAutoskip && typeof diskAutoskip[id] === 'boolean') {
@@ -517,6 +665,8 @@
       const diskDiscordPresence = preferences?.discordPresence;
       const diskLibrary = preferences?.library;
       const diskOnboarding = preferences?.onboarding;
+      const diskAuthProfile =
+        typeof preferences?.authProfile === 'string' ? preferences.authProfile : '';
       const hasLocalDiscordPrefs =
         localStorage.getItem(DISCORD_KEYS.enabled) != null ||
         localStorage.getItem(DISCORD_KEYS.showPaused) != null ||
@@ -528,11 +678,11 @@
 
       if (hasDiskState) {
         localStorage.setItem('enabledPlugins', JSON.stringify(diskPlugins));
-        localStorage.setItem('currentTheme', diskTheme);
+        localStorage.setItem('currentTheme', LIQUID_GLASS_THEME);
         localStorage.setItem(METADATA_ADDON_KEY, diskMetadataAddon);
       } else if (hasLocalState) {
         localStorage.setItem('enabledPlugins', JSON.stringify(localPlugins));
-        localStorage.setItem('currentTheme', localTheme);
+        localStorage.setItem('currentTheme', LIQUID_GLASS_THEME);
       } else {
         localStorage.setItem('enabledPlugins', '[]');
         localStorage.setItem('currentTheme', LIQUID_GLASS_THEME);
@@ -553,18 +703,22 @@
         if (diskOnboarding.tmdbNoticeShown === true) localStorage.setItem(TMDB_NOTICE_KEY, 'true');
         if (diskOnboarding.defaultsApplied === true) localStorage.setItem(DEFAULTS_APPLIED_KEY, 'true');
       }
+      restoreAuthProfileFromDisk(diskAuthProfile);
 
       await loadAutoskipSettings();
 
+      const authProfile = readAuthProfileSnapshot();
+      if (authProfile) lastPersistedAuthProfile = authProfile;
       await api.saveUserPreferences({
         enabledPlugins: getEnabledPlugins(),
-        currentTheme: getCurrentTheme(),
+        currentTheme: LIQUID_GLASS_THEME,
         autoskip: getAutoskipPreferences(),
         metadataAddon: getMetadataAddon(),
         language: getLanguagePreferences(),
         preload: getPreloadPreference(),
         discordPresence: getDiscordPresencePreferences(),
         library: getLibraryPreferences(),
+        authProfile,
         onboarding: {
           tmdbNoticeShown: localStorage.getItem(TMDB_NOTICE_KEY) === 'true',
           defaultsApplied: localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true',
@@ -632,6 +786,9 @@
       background: transparent !important;
       background-color: transparent !important;
     }
+    html.${PLAYER_ROUTE_CLASS} [class*="player-container"] [class*="control-bar-button"]:has(> svg path[d^="M91.54"]) {
+      display: none !important;
+    }
   `;
 
   const OPAQUE_UI_STYLE_ID = 'stremio-custom-opaque-ui';
@@ -679,17 +836,11 @@
   window.__stremioCustomPlayerTransparencyEnsure = ensurePlayerTransparencyFix;
 
   async function syncLiquidGlassNavigation(themeFileName) {
-    removeHorizontalNavPluginFromEnabled();
-    if (themeFileName === LIQUID_GLASS_THEME) {
-      window.__stremioCustomLiquidGlassNavStart?.();
-      return;
-    }
-    window.__stremioCustomLiquidGlassNavStop?.();
-    unloadPlugin(HORIZONTAL_NAV_PLUGIN);
+    window.__stremioCustomLiquidGlassNavStart?.();
   }
 
   async function applyTheme(themeFileName) {
-    const targetTheme = themeFileName || '';
+    const targetTheme = LIQUID_GLASS_THEME;
     if (appliedThemeName === targetTheme && document.getElementById('stremio-custom-active-theme')) {
       ensurePlayerGlassStyles();
       ensurePlayerTransparencyFix();
@@ -697,11 +848,6 @@
     }
     document.getElementById('stremio-custom-active-theme')?.remove();
     appliedThemeName = targetTheme;
-    if (!targetTheme || targetTheme === 'Default') {
-      await syncLiquidGlassNavigation('');
-      ensurePlayerGlassStyles();
-      return true;
-    }
     const css = await api.readTheme(targetTheme);
     if (!css) {
       console.warn('[StremioCustom] Theme not found:', targetTheme);
@@ -727,7 +873,7 @@
   }
 
   async function ensureThemeApplied() {
-    const current = getCurrentTheme();
+    const current = LIQUID_GLASS_THEME;
     const hasThemeStyle = document.getElementById('stremio-custom-active-theme');
     if (hasThemeStyle && appliedThemeName === current) {
       ensurePlayerGlassStyles();
@@ -745,6 +891,7 @@
   async function resolvePluginRef(fileRef) {
     const normalized = String(fileRef || '').replace(/\\/g, '/');
     if (!normalized) return null;
+    if (isHeroPluginRef(normalized)) return DYNAMIC_HERO_PLUGIN;
     const plugins = await api.listPlugins();
     if (plugins.includes(normalized)) return normalized;
     const baseName = normalized.split('/').pop();
@@ -757,8 +904,6 @@
     for (const fileRef of enabled) {
       const resolved = await resolvePluginRef(fileRef);
       if (!resolved) continue;
-      const baseName = String(resolved).replace(/\\/g, '/').split('/').pop();
-      if (baseName && REMOVED_PLUGIN_BASENAMES.has(baseName)) continue;
       migrated.push(resolved);
     }
     if (JSON.stringify(migrated) !== JSON.stringify(enabled)) setEnabledPlugins(migrated);
@@ -775,6 +920,7 @@
   async function loadPlugin(fileRef) {
     const resolved = await resolvePluginRef(fileRef);
     if (!resolved) return false;
+    if (isHeroPluginRef(resolved)) return true;
     const scriptId = toScriptId(resolved);
     if (document.getElementById(scriptId)) return true;
     const rawContent = await api.readPlugin(resolved);
@@ -790,23 +936,51 @@
   }
 
   function unloadPlugin(fileRef) {
-    document.getElementById(toScriptId(fileRef))?.remove();
+    const normalized = String(fileRef || '').replace(/\\/g, '/');
+    if (!normalized) return false;
+    const baseName = normalized.split('/').pop();
+    if (isHeroPluginRef(normalized)) {
+      cleanupLegacyHeroDom();
+    }
+    if (/seek[-_ ]?buttons/i.test(normalized) || /seek[-_ ]?buttons/i.test(baseName || '')) {
+      window.__stremioSeekButtonsUnload?.();
+    }
+    let removed = false;
+    const direct = document.getElementById(toScriptId(normalized));
+    if (direct) {
+      direct.remove();
+      removed = true;
+    }
+    if (baseName) {
+      const suffix = `__${baseName.replace(/\\/g, '__')}`;
+      document.querySelectorAll('script[id]').forEach((node) => {
+        if (node.id.endsWith(suffix)) {
+          node.remove();
+          removed = true;
+        }
+      });
+    }
+    return removed;
+  }
+
+  async function unloadPluginResolved(fileRef) {
+    const resolved = await resolvePluginRef(fileRef);
+    if (!resolved) return unloadPlugin(fileRef);
+    return unloadPlugin(resolved);
   }
 
   const PLAYBACK_KEEP_PLUGINS = new Set([
     'interface/context-menu-fix.plugin.js',
     'interface/enhanced-titlebar.plugin.js',
     'player/tidb.plugin.js',
-    'player/enhanced-player.plugin.js',
+    'player/seek-buttons.plugin.js',
   ]);
 
   const IDLE_DURING_PLAYBACK_PREFIXES = [
     'interface/',
     'metadata/',
     'addons/',
-    'utilities/',
     'player/stream-ui.plugin.js',
-    'player/stream-quality-picker.plugin.js',
   ];
 
   function isIdleDuringPlayback(pluginRef) {
@@ -826,7 +1000,7 @@
     const enabled = await migrateEnabledPlugins();
     const targetPlugins = filterPluginsForRoute(enabled);
     for (const pluginRef of enabled) {
-      if (!targetPlugins.includes(pluginRef)) unloadPlugin(pluginRef);
+      if (!targetPlugins.includes(pluginRef)) await unloadPluginResolved(pluginRef);
     }
     for (const pluginRef of targetPlugins) {
       await loadPlugin(pluginRef);
@@ -850,7 +1024,7 @@
     const enabled = await migrateEnabledPlugins();
     if (playbackActive) {
       for (const pluginRef of enabled) {
-        if (isIdleDuringPlayback(pluginRef)) unloadPlugin(pluginRef);
+        if (isIdleDuringPlayback(pluginRef)) await unloadPluginResolved(pluginRef);
       }
     } else {
       await ensurePluginsLoadedForRoute();
@@ -860,19 +1034,25 @@
   async function ensureDefaultPluginsEnabled() {
     const all = await api.listPlugins();
     if (!Array.isArray(all) || !all.length) return;
+    if (localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true') return;
+
     const enabled = await migrateEnabledPlugins();
-    const next = new Set(enabled);
+    const next = [...enabled];
     let changed = false;
-    for (const pattern of DEFAULT_PLUGIN_PATTERNS) {
-      const match = all.find((ref) => pattern.test(String(ref || '')));
-      if (match && !next.has(match)) {
-        next.add(match);
+    for (const ref of all) {
+      const normalized = String(ref || '').replace(/\\/g, '/');
+      const baseName = normalized.split('/').pop() || '';
+      const skip = DEFAULT_DISABLED_PLUGIN_PATTERNS.some(
+        (pattern) => pattern.test(normalized) || pattern.test(baseName)
+      );
+      if (skip) continue;
+      if (!isPluginEnabled(ref, next)) {
+        next.push(normalized);
         changed = true;
       }
     }
-    const merged = Array.from(next);
-    if (changed || merged.length !== enabled.length) {
-      setEnabledPlugins(merged);
+    if (changed) {
+      setEnabledPlugins(next);
       await ensurePluginsLoadedForRoute();
     }
     localStorage.setItem(DEFAULTS_APPLIED_KEY, 'true');
@@ -996,6 +1176,9 @@
       setCurrentTheme,
       queryFirstMatching,
       isPluginEnabled,
+      isDynamicHeroEnabled,
+      enablePlugin,
+      disablePlugin,
       hydrateUserPreferences,
       getAutoskipPreferences,
       setAutoskipEnabled,
@@ -1013,7 +1196,7 @@
     },
     plugins: {
       loadPlugin,
-      unloadPlugin,
+      unloadPlugin: unloadPluginResolved,
       resolvePluginRef,
       migrateEnabledPlugins,
       ensurePluginsLoadedForRoute,
@@ -1022,7 +1205,7 @@
     theme: { applyTheme, ensureThemeApplied },
   };
 
-  const pluginApi = { loadPlugin, unloadPlugin };
+  const pluginApi = { loadPlugin, unloadPlugin: unloadPluginResolved };
 
   function safeRun(label, fn) {
     try {
@@ -1036,7 +1219,12 @@
     hookShellMessages();
     injectPlaybackGuard();
     await hydrateUserPreferences();
+    if (localStorage.getItem(DYNAMIC_HERO_ENABLED_KEY) === null) {
+      localStorage.setItem(DYNAMIC_HERO_ENABLED_KEY, '1');
+    }
     await ensureDefaultPluginsEnabled();
+    syncDynamicHeroEnabledFlag();
+    scheduleAuthProfilePersistence();
     pathsCache = await api.getPaths();
     window.__stremioLanguageNames = await invoke('read-language-names');
     await ensureThemeApplied();

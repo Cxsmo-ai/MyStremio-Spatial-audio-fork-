@@ -1,7 +1,7 @@
 /**
  * @name Enhanced Title Bar
  * @description Enhances the title bar with additional information.
- * @version 2.0.0
+ * @version 26.0.1
  * @author Fxy
  */
 

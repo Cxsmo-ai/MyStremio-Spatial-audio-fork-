@@ -52,6 +52,34 @@ if (-not (Test-Path $OutputDir)) {
 }
 $SetupPath = Join-Path $OutputDir $SetupName
 
+function Sync-ReleaseArtifacts {
+    param([string]$ReleaseDirectory)
+
+    if (-not $env:MYSTREMIO_ASSET_SOURCE_ROOT) {
+        $env:MYSTREMIO_ASSET_SOURCE_ROOT = Join-Path $RepoRoot "assets-bundle"
+    }
+
+    Write-Host "Refreshing release artifacts before packaging..."
+    & (Join-Path $ProjectRoot "scripts\sync-custom-assets.ps1") `
+        -ReleaseDir $ReleaseDirectory `
+        -SourceRoot $env:MYSTREMIO_ASSET_SOURCE_ROOT
+
+    # Always rebuild/copy web UI so -SkipBuild and full builds package the same fresh bundle.
+    & (Join-Path $ProjectRoot "scripts\build-webui.ps1")
+
+    $WebUiDir = Join-Path $ProjectRoot "webui"
+    $WebUiOut = Join-Path $ReleaseDirectory "webui"
+    if (-not (Test-Path $WebUiDir)) {
+        throw "Web UI missing. Expected build output at $WebUiDir"
+    }
+    if (Test-Path $WebUiOut) {
+        Remove-Item $WebUiOut -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $WebUiOut -Force | Out-Null
+    Copy-Item -Path (Join-Path $WebUiDir "*") -Destination $WebUiOut -Recurse -Force
+    Write-Host "Synced web UI to $WebUiOut"
+}
+
 if (-not $SkipBuild) {
     & (Join-Path $ProjectRoot "build-custom.ps1") -Target $Target -SkipShortcut
 }
@@ -64,6 +92,8 @@ if (-not (Test-Path $ExePath)) {
 if (-not (Test-Path (Join-Path $ReleaseDir "plugins"))) {
     throw "Release folder missing plugins/. Run build-custom.ps1 first."
 }
+
+Sync-ReleaseArtifacts -ReleaseDirectory $ReleaseDir
 
 $Inno = Find-InnoSetup
 if ($Inno) {

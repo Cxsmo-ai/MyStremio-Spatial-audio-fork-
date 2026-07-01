@@ -3,7 +3,7 @@
  * @description Unified stream-list UI: AfterCredits, WatchHub, ratings, accordions.
  * @version 2.0.0
  * @category player
- * @author Stremio Custom
+ * @author MyStremio
  */
 /* global StremioEnhancedAPI */
 
@@ -32,7 +32,13 @@
     contentKey: '',
     lastBox: null,
     ready: false,
+    pauseUntil: 0,
   };
+
+  function pauseStreamUi(ms = 1200) {
+    state.pauseUntil = Date.now() + ms;
+    teardownAll(true);
+  }
 
   function api() {
     return window.StremioEnhancedAPI || null;
@@ -699,6 +705,7 @@
     }
 
     function scheduleRebuild(box) {
+      if (Date.now() < state.pauseUntil) return;
       if (timer) clearTimeout(timer);
       const delay = streamsLoading() ? 120 : 250;
       timer = setTimeout(() => {
@@ -777,6 +784,7 @@
       if (!obs) {
         let mutTimer = null;
         obs = new MutationObserver(() => {
+          if (Date.now() < state.pauseUntil) return;
           if (mutTimer) clearTimeout(mutTimer);
           mutTimer = setTimeout(() => {
             mutTimer = null;
@@ -1433,6 +1441,7 @@
 
   function tick() {
     if (window.stremioCustomSuspendBackground?.()) return;
+    if (Date.now() < state.pauseUntil) return;
     if (!/#\/detail|#\/meta/.test(location.hash || '') && !document.querySelector('[class*="streams-list-"]')) {
       return;
     }
@@ -1471,6 +1480,22 @@
   async function init() {
     injectCSS();
     await loadSettings();
+
+    document.addEventListener(
+      'stremio-streams-addon-filter-changed',
+      () => pauseStreamUi(1200),
+      true
+    );
+
+    document.addEventListener(
+      'click',
+      (event) => {
+        const option = event.target?.closest?.('[class*="select-choices-wrapper"] [class*="option-"]');
+        if (!option || option.closest('[class*="back-button-"]')) return;
+        pauseStreamUi(1200);
+      },
+      true
+    );
 
     const a = api();
     if (a?.onSettingsSaved) {

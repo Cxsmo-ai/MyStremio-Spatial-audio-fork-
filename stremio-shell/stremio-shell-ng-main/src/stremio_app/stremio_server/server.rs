@@ -4,12 +4,14 @@ use std::io::Write;
 use std::{
     env, fs,
     io::Read,
+    net::TcpStream,
     ops::Deref,
     os::windows::process::CommandExt,
     path,
     process::{Command, Stdio},
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 use winapi::um::{
     processthreadsapi::GetCurrentProcess,
@@ -68,14 +70,48 @@ impl StremioServer {
                 .expect("Cannot get the current executable path");
             path.pop();
             let lines = Arc::new(Mutex::new(String::new()));
-            let runtime_path = path.clone().join(path::Path::new("stremio-runtime"));
+            let runtime_path = path.clone().join(path::Path::new("stremio-runtime.exe"));
             let server_path = path.clone().join(path::Path::new("server.js"));
-            let child = Command::new(runtime_path)
+            let webui_server_path = path.clone().join(path::Path::new("webui-server.js"));
+            let webui_dir = path.clone().join(path::Path::new("webui"));
+            let webui_index = webui_dir.join(path::Path::new("index.html"));
+
+            let local_webui_location =
+                "http://127.0.0.1:11475/index.html#/?streamingServerUrl=http%3A%2F%2F127.0.0.1%3A11470%2F";
+            let local_webui_available = webui_server_path.exists() && webui_index.exists();
+
+            if local_webui_available {
+                let _ = Command::new(runtime_path.clone())
+                    .arg(webui_server_path)
+                    .arg("--dir")
+                    .arg(webui_dir)
+                    .arg("--port")
+                    .arg("11475")
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn();
+
+                for _ in 0..50 {
+                    if TcpStream::connect("127.0.0.1:11475").is_ok() {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
+            }
+
+            let mut server_command = Command::new(runtime_path);
+            server_command
                 .arg(server_path)
+                .env("NO_CORS", "1")
                 .creation_flags(CREATE_NO_WINDOW)
                 .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn();
+                .stderr(Stdio::piped());
+            if local_webui_available {
+                server_command.env("WEBUI_LOCATION", local_webui_location);
+            }
+
+            let child = server_command.spawn();
             match child {
                 Ok(mut child) => {
                     let mut stdout = child.stdout.take().unwrap();

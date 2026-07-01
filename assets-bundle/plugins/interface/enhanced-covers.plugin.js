@@ -2,7 +2,7 @@
  * @name EnhancedCovers
  * @description Widens the cover images in the Continue Watching section using background images with logo overlay.
  * @updateUrl none
- * @version 2.0.0
+ * @version 26.0.4
  * @author Fxy rewritten and improved by MrBlu03
  */
 
@@ -37,16 +37,51 @@
         aspect-ratio: 16 / 9 !important;
       }
 
-      /* Make poster image layer fill the container */
+      /* Keep image layer behind interactive overlays (play button, progress) */
       [class*="continue-watching-row"] [class*="poster-image-layer"] {
-        position: relative !important;
+        position: absolute !important;
+        top: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        z-index: 1 !important;
         height: 100% !important;
         width: 100% !important;
       }
 
+      [class*="continue-watching-row"] [class*="play-icon-layer"] {
+        z-index: 20 !important;
+        pointer-events: auto !important;
+        position: absolute !important;
+      }
+
+      /* Keep inner play triangle above the ring (do not flatten child z-index) */
+      [class*="continue-watching-row"] [class*="play-icon-layer"] [class*="play-icon-outer"] {
+        z-index: 1 !important;
+      }
+
+      [class*="continue-watching-row"] [class*="play-icon-layer"] [class*="play-icon-"]:not([class*="outer"]):not([class*="background"]) {
+        z-index: 2 !important;
+        position: relative !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
+
+      [class*="continue-watching-row"] [class*="progress-bar-layer"] {
+        z-index: 12 !important;
+        pointer-events: none !important;
+      }
+
+      [class*="continue-watching-row"] [class*="dismiss-icon-layer"] {
+        z-index: 16 !important;
+        pointer-events: auto !important;
+      }
+
       /* Ensure the image covers properly */
       [class*="continue-watching-row"] [class*="poster-image-layer"] img[class*="poster-image"] {
-        position: relative !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
         width: 100% !important;
         height: 100% !important;
         aspect-ratio: 16 / 9 !important;
@@ -60,7 +95,7 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        z-index: 1;
+        z-index: 2;
         max-height: 50%;
         max-width: 70%;
         object-fit: contain;
@@ -211,7 +246,12 @@
             const testLogo = new Image();
             testLogo.onload = function () {
               logoImg.src = logoSrc;
-              posterContainer.appendChild(logoImg);
+              const playLayer = posterContainer.querySelector('[class*="play-icon-layer"]');
+              if (playLayer) {
+                posterContainer.insertBefore(logoImg, playLayer);
+              } else {
+                posterContainer.appendChild(logoImg);
+              }
               console.log(`[EnhancedCovers] Added logo for ${imdbId}`);
             };
             testLogo.onerror = function () {

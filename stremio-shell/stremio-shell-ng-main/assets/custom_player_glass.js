@@ -3,6 +3,11 @@
 
   const STYLE_ID = 'stremio-custom-player-glass';
 
+  const PLAYER_GLASS_BG = 'rgba(42, 42, 46, 0.58)';
+  const PLAYER_GLASS_BORDER = 'rgba(255, 255, 255, 0.14)';
+  const PLAYER_GLASS_SHADOW =
+    '0 8px 32px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.18)';
+
   const GLASS_CSS = `
     :root {
       --primary-accent-color: #ffffff !important;
@@ -10,6 +15,8 @@
       --overlay-color: rgba(255, 255, 255, 0.22) !important;
       --modal-background-color: rgba(70, 70, 70, 0.72) !important;
       --backdrop-filter: blur(20px) saturate(180%) !important;
+      --stremio-player-glass-bg: ${PLAYER_GLASS_BG};
+      --stremio-player-glass-border: ${PLAYER_GLASS_BORDER};
     }
 
     html body [class*="player-container"] [class*="control-bar-layer"]::before,
@@ -22,12 +29,12 @@
       display: flex !important;
       flex-direction: row !important;
       gap: 0.25rem !important;
-      background: rgba(70, 70, 70, 0.28) !important;
+      background: ${PLAYER_GLASS_BG} !important;
       border-radius: 20px !important;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+      box-shadow: ${PLAYER_GLASS_SHADOW} !important;
       backdrop-filter: blur(20px) saturate(180%) !important;
       -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border: 1px solid ${PLAYER_GLASS_BORDER} !important;
       margin-bottom: 10px !important;
       min-height: 52px !important;
       padding: 0 0.4rem !important;
@@ -56,12 +63,32 @@
     }
 
     html body [class*="player-container"] [class*="menu-layer"],
-    html body [class*="player-container"] [class*="side-drawer-button-layer"] {
-      background: rgba(70, 70, 70, 0.28) !important;
+    html body [class*="player-container"] [class*="side-drawer-button-layer"],
+    html body [class*="player-container"] [class*="nav-menu-container"],
+    html body [class*="player-container"] [class*="menu-container"][class*="menu-direction"] {
+      background: var(--stremio-player-glass-bg, ${PLAYER_GLASS_BG}) !important;
       backdrop-filter: blur(20px) saturate(180%) !important;
       -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border: 1px solid var(--stremio-player-glass-border, ${PLAYER_GLASS_BORDER}) !important;
+      box-shadow: ${PLAYER_GLASS_SHADOW} !important;
+    }
+
+    html body [class*="player-container"] [class*="menu-layer"],
+    html body [class*="player-container"] [class*="side-drawer-button-layer"] {
       border-radius: 20px !important;
+    }
+
+    html body [class*="player-container"] [class*="nav-menu-container"] {
+      border-radius: 16px !important;
+    }
+
+    html.stremio-custom-player-route .context-menu-portal [class*="nav-menu-container"],
+    html.stremio-custom-player-route .context-menu-portal [class*="menu-container"][class*="menu-direction"] {
+      background: var(--stremio-player-glass-bg, ${PLAYER_GLASS_BG}) !important;
+      backdrop-filter: blur(20px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+      border: 1px solid var(--stremio-player-glass-border, ${PLAYER_GLASS_BORDER}) !important;
+      box-shadow: ${PLAYER_GLASS_SHADOW} !important;
     }
   `;
 

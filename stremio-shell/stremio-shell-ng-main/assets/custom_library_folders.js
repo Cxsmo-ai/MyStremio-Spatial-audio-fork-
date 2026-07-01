@@ -553,6 +553,7 @@
       document.addEventListener('click', closeMenu, true);
       window.addEventListener('resize', closeMenu);
       window.addEventListener('hashchange', closeMenu);
+      window.addEventListener('scroll', closeMenu, true);
     }
 
     menu.innerHTML = '';

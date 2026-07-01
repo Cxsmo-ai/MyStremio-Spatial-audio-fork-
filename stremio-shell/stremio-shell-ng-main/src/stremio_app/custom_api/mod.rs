@@ -2,7 +2,10 @@ mod paths;
 mod storage;
 
 use crate::stremio_app::discord_presence;
-use paths::{bundled_plugins_dir, bundled_themes_dir, ensure_asset_dirs, plugins_dir, themes_dir};
+use paths::{
+    bundled_plugins_dir, bundled_themes_dir, ensure_asset_dirs, ensure_webview_user_data_dir,
+    plugins_dir, themes_dir,
+};
 use serde_json::{json, Value};
 use std::sync::{Mutex, OnceLock};
 use storage::{
@@ -35,6 +38,11 @@ fn schemas() -> &'static Mutex<storage::RegisteredSchemas> {
 
 pub fn init() {
     ensure_asset_dirs();
+    ensure_webview_user_data_dir();
+}
+
+pub fn webview_user_data_dir() -> std::path::PathBuf {
+    paths::webview_user_data_dir()
 }
 
 pub fn handle_request(message: &Value) -> Option<String> {

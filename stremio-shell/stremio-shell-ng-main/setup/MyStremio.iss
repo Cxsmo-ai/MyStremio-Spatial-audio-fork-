@@ -39,6 +39,8 @@ WizardStyle=modern
 LanguageDetectionMethod=uilanguage
 ShowLanguageDialog=auto
 CloseApplications=yes
+CloseApplicationsFilter={#MyAppExeName},stremio-runtime.exe,node.exe
+RestartApplications=no
 WizardImageFile={#SourcePath}..\images\windows-installer.bmp
 WizardSmallImageFile={#SourcePath}..\images\windows-installer-header.bmp
 SetupIconFile={#SourcePath}..\images\stremio.ico
@@ -104,6 +106,7 @@ Source: "{#ReleaseDir}ffmpeg.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}ffprobe.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}stremio-runtime.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}server.js"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ReleaseDir}webui-server.js"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}avcodec-58.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}avdevice-58.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}avfilter-7.dll"; DestDir: "{app}"; Flags: ignoreversion
@@ -116,6 +119,7 @@ Source: "{#ReleaseDir}vcruntime140.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}vcruntime140_1.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}plugins\*"; DestDir: "{app}\plugins"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#ReleaseDir}themes\*"; DestDir: "{app}\themes"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ReleaseDir}webui\*"; DestDir: "{app}\webui"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Registry]
 Root: HKA; Subkey: "Software\Classes\{#AssocTorrentExt}}\OpenWithProgids"; ValueType: string; ValueName: "{#AssocTorrentKey}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: assoctorrent

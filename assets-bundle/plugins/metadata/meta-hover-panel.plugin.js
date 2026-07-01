@@ -1,8 +1,8 @@
 /**
  * @name Meta Hover Panel
  * @description Rich movie/series info panel on poster hover using Cinemeta metadata.
- * @version 2.0.0
- * @author StremioCustom
+ * @version 2.0.1
+ * @author MyStremio
  * @category Metadata
  */
 
@@ -435,6 +435,98 @@
     return mediaFromCatalogItem(match);
   }
 
+  function clearResolvedMedia(root) {
+    if (!root) return;
+    delete root.dataset.metaHoverId;
+    delete root.dataset.metaHoverType;
+  }
+
+  function invalidateCatalogCache() {
+    catalogCache = { at: 0, items: [] };
+  }
+
+  function clearHoverBindingsIn(container) {
+    if (!container) return;
+    container.querySelectorAll('[class*="meta-item-container"]').forEach((root) => {
+      clearResolvedMedia(root);
+    });
+  }
+
+  function isCatalogMutation(mutations) {
+    for (const mutation of mutations) {
+      const target = mutation.target;
+      if (target instanceof Element) {
+        if (target.closest('[class*="meta-items-container"], [class*="meta-row-container"], [class*="continue-watching"]')) {
+          return true;
+        }
+      }
+      for (const node of mutation.addedNodes) {
+        if (node instanceof Element) {
+          if (
+            node.matches?.('[class*="meta-item"], [class*="meta-item-container"], [class*="meta-items-container"]')
+            || node.querySelector?.('[class*="meta-item"], [class*="meta-item-container"]')
+          ) {
+            return true;
+          }
+        }
+      }
+      for (const node of mutation.removedNodes) {
+        if (node instanceof Element) {
+          if (
+            node.matches?.('[class*="meta-item"], [class*="meta-item-container"], [class*="meta-items-container"]')
+            || node.querySelector?.('[class*="meta-item"], [class*="meta-item-container"]')
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  function datasetMatchesDom(root) {
+    const datasetId = root.dataset.metaHoverId;
+    if (!datasetId || !/^tt\d{7,}$/i.test(datasetId)) return false;
+
+    const posterId = getPosterImdbId(root);
+    if (posterId && posterId !== datasetId.toLowerCase()) return false;
+
+    const title = getItemTitle(root);
+    if (title) {
+      const hrefCandidates = new Set();
+      [root.getAttribute?.('href'), root.href]
+        .filter(Boolean)
+        .forEach((href) => hrefCandidates.add(href));
+      root.querySelectorAll('[href]').forEach((node) => {
+        const href = node.getAttribute('href');
+        if (href) hrefCandidates.add(href);
+      });
+      for (const href of hrefCandidates) {
+        const media = parseMediaFromHref(href);
+        if (media?.id && /^tt\d{7,}$/i.test(media.id) && media.id.toLowerCase() !== datasetId.toLowerCase()) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  function inferSeriesFromRoot(root) {
+    const href = root.href || root.getAttribute('href') || '';
+    if (/series|episode|season/i.test(href)) return true;
+
+    for (const node of root.querySelectorAll('[href]')) {
+      const nodeHref = node.getAttribute('href') || '';
+      if (/series|episode|season/i.test(nodeHref)) return true;
+    }
+
+    const title = getItemTitle(root);
+    if (title && /\bS\d{1,2}E\d{1,2}\b/i.test(title)) return true;
+
+    return false;
+  }
+
   function storeResolvedMedia(root, media) {
     if (!root || !media?.id) return;
     if (/^tt\d{7,}$/i.test(media.id)) {
@@ -444,20 +536,40 @@
   }
 
   function annotateMetaItem(root) {
-    if (root.dataset.metaHoverBound === 'true') return;
-    root.dataset.metaHoverBound = 'true';
+    if (root.dataset.metaHoverBound !== 'true') {
+      root.dataset.metaHoverBound = 'true';
+    }
+
+    let resolvedId = null;
+    let resolvedType = inferSeriesFromRoot(root) ? 'series' : 'movie';
 
     const posterId = getPosterImdbId(root);
     if (posterId) {
-      root.dataset.metaHoverId = posterId;
-      root.dataset.metaHoverType = /series|episode|season/i.test(root.outerHTML) ? 'series' : 'movie';
+      resolvedId = posterId;
     }
 
     const href = root.href || root.getAttribute('href') || '';
-    const media = parseMediaFromHref(href) || parseMediaFromText(root.outerHTML);
+    const media = parseMediaFromHref(href) || parseMediaFromText(root.textContent || '');
     if (media && /^tt\d{7,}$/i.test(media.id)) {
-      root.dataset.metaHoverId = media.id.toLowerCase();
-      root.dataset.metaHoverType = media.type;
+      resolvedId = media.id.toLowerCase();
+      resolvedType = media.type || resolvedType;
+    }
+
+    if (!resolvedId) {
+      root.querySelectorAll('[href]').forEach((node) => {
+        const nodeMedia = parseMediaFromHref(node.getAttribute('href') || '');
+        if (nodeMedia && /^tt\d{7,}$/i.test(nodeMedia.id)) {
+          resolvedId = nodeMedia.id.toLowerCase();
+          resolvedType = nodeMedia.type || resolvedType;
+        }
+      });
+    }
+
+    if (resolvedId) {
+      root.dataset.metaHoverId = resolvedId;
+      root.dataset.metaHoverType = resolvedType;
+    } else {
+      clearResolvedMedia(root);
     }
   }
 
@@ -473,27 +585,18 @@
   async function extractMediaInfo(element) {
     const root = element.closest('[class*="meta-item-container"]') || element;
 
-    if (root.dataset.metaHoverId && /^tt\d{7,}$/i.test(root.dataset.metaHoverId)) {
-      return {
-        type: root.dataset.metaHoverType || 'movie',
-        id: root.dataset.metaHoverId.toLowerCase(),
-      };
+    if (root.dataset.metaHoverId && !datasetMatchesDom(root)) {
+      clearResolvedMedia(root);
     }
 
     const posterId = getPosterImdbId(root);
     if (posterId) {
       const media = {
-        type: /series|episode|season/i.test(root.outerHTML) ? 'series' : 'movie',
+        type: inferSeriesFromRoot(root) ? 'series' : 'movie',
         id: posterId,
       };
       storeResolvedMedia(root, media);
       return media;
-    }
-
-    const byIndex = await resolveByRowIndex(root);
-    if (byIndex) {
-      storeResolvedMedia(root, byIndex);
-      return byIndex;
     }
 
     const hrefCandidates = new Set();
@@ -511,39 +614,43 @@
       if (!media) continue;
 
       if (/^tmdb:/i.test(media.id)) {
-        const titledMedia = { ...media, title: getItemTitle(root), item: null };
         const fromCatalog = await resolveFromCatalog(root);
         if (fromCatalog) {
           storeResolvedMedia(root, fromCatalog);
           return fromCatalog;
         }
-        return titledMedia;
+        return { ...media, title: getItemTitle(root), item: null };
       }
 
-      storeResolvedMedia(root, media);
-      return media;
+      if (/^tt\d{7,}$/i.test(media.id)) {
+        storeResolvedMedia(root, media);
+        return media;
+      }
     }
 
-    const fromRootText = parseMediaFromText(root.outerHTML);
-    if (fromRootText) {
+    const byIndex = await resolveByRowIndex(root);
+    if (byIndex) {
+      storeResolvedMedia(root, byIndex);
+      return byIndex;
+    }
+
+    const fromRootText = parseMediaFromText(root.textContent || '');
+    if (fromRootText && /^tt\d{7,}$/i.test(fromRootText.id)) {
       storeResolvedMedia(root, fromRootText);
       return fromRootText;
-    }
-
-    const fromImg = getPosterImdbId(root);
-    if (fromImg) {
-      const media = {
-        type: /series|episode|season/i.test(root.outerHTML) ? 'series' : 'movie',
-        id: fromImg,
-      };
-      storeResolvedMedia(root, media);
-      return media;
     }
 
     const fromCatalog = await resolveFromCatalog(root);
     if (fromCatalog) {
       storeResolvedMedia(root, fromCatalog);
       return fromCatalog;
+    }
+
+    if (root.dataset.metaHoverId && /^tt\d{7,}$/i.test(root.dataset.metaHoverId) && datasetMatchesDom(root)) {
+      return {
+        type: root.dataset.metaHoverType || 'movie',
+        id: root.dataset.metaHoverId.toLowerCase(),
+      };
     }
 
     return null;
@@ -883,8 +990,12 @@
 
   function buildMetaLine(meta, type) {
     const parts = [];
-    if (meta.releaseInfo) parts.push(meta.releaseInfo);
-    if (meta.year) parts.push(String(meta.year));
+    const releaseInfo = String(meta.releaseInfo || '').trim();
+    if (releaseInfo) {
+      parts.push(releaseInfo);
+    } else if (meta.year) {
+      parts.push(String(meta.year));
+    }
     if (type === 'series' && Array.isArray(meta.videos) && meta.videos.length) {
       parts.push(`${meta.videos.length} Episodes`);
     }
@@ -1143,7 +1254,7 @@
   }
 
   function scheduleHover(anchor) {
-    if (!anchor || trackedAnchor === anchor) return;
+    if (!anchor) return;
     trackedAnchor = anchor;
     clearTimeout(hoverTimer);
 
@@ -1178,11 +1289,7 @@
 
   function handleScroll() {
     if (!activePanel) return;
-    if (!activeAnchor?.isConnected || !isAnchorVisible(activeAnchor)) {
-      clearHoverState();
-      return;
-    }
-    repositionActivePanel();
+    clearHoverState();
   }
 
   function repositionActivePanel() {
@@ -1208,13 +1315,35 @@
       }
       repositionActivePanel();
     });
-    window.addEventListener('hashchange', clearHoverState);
+    window.addEventListener('hashchange', () => {
+      invalidateCatalogCache();
+      clearHoverState();
+    });
     window.addEventListener('blur', clearHoverState);
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) clearHoverState();
     });
 
-    const observer = new MutationObserver(() => annotateMetaItems());
+    const observer = new MutationObserver((mutations) => {
+      if (isCatalogMutation(mutations)) {
+        invalidateCatalogCache();
+        clearHoverState();
+        mutations.forEach((mutation) => {
+          if (mutation.target instanceof Element) {
+            const container = mutation.target.closest('[class*="meta-items-container"], [class*="meta-row-container"]');
+            if (container) clearHoverBindingsIn(container);
+          }
+          mutation.addedNodes.forEach((node) => {
+            if (node instanceof Element) {
+              const container = node.closest?.('[class*="meta-items-container"], [class*="meta-row-container"]')
+                || (node.matches?.('[class*="meta-items-container"], [class*="meta-row-container"]') ? node : null);
+              if (container) clearHoverBindingsIn(container);
+            }
+          });
+        });
+      }
+      annotateMetaItems();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
 
     console.info('[MetaHoverPanel] Ready');

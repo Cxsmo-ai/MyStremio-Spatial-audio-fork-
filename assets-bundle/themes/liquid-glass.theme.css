@@ -10,8 +10,6 @@
 
 * {
     font-family: "Inter", sans-serif !important;
-
-    scrollbar-width: none;
 }
 
 /* change the accent color from purple to white */
@@ -42,7 +40,14 @@
 
 html body {
     background: var(--background) !important;
-    overflow-y: scroll !important;
+    overflow: hidden !important;
+}
+
+html {
+    overflow: hidden !important;
+    width: 100% !important;
+    height: 100% !important;
+    color-scheme: dark;
 }
 
 
@@ -196,8 +201,36 @@ html body {
 }
 
 ::-webkit-scrollbar {
-    width: 0; /* removes scrollbar track */
-    height: 0;
+    width: var(--scroll-bar-size, 6px);
+    height: var(--scroll-bar-size, 6px);
+}
+
+::-webkit-scrollbar-thumb {
+    border-radius: var(--scroll-bar-size, 6px);
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary-accent-color, #fff);
+}
+
+::-webkit-scrollbar-track {
+    background-color: transparent;
+}
+
+#app [class*="vertical-nav-bar-container"],
+#app [class*="horizontal-nav-bar"],
+.enhanced-scroll-container,
+.enhanced-cast-container {
+    scrollbar-width: none !important;
+}
+
+#app [class*="vertical-nav-bar-container"]::-webkit-scrollbar,
+#app [class*="horizontal-nav-bar"]::-webkit-scrollbar,
+.enhanced-scroll-container::-webkit-scrollbar,
+.enhanced-cast-container::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
 }
 
 /* ========================= NAV BAR / HEADER ========================= */
@@ -492,6 +525,24 @@ html body {
     border: 1px solid rgba(255, 255, 255, 0.04) !important;
 }
 
+[class*="player-container"] [class*="nav-menu-container"],
+[class*="player-container"] [class*="menu-container"][class*="menu-direction"] {
+    background: rgba(42, 42, 46, 0.58) !important;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.38),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+html.stremio-custom-player-route .context-menu-portal [class*="nav-menu-container"],
+html.stremio-custom-player-route .context-menu-portal [class*="menu-container"][class*="menu-direction"] {
+    background: rgba(42, 42, 46, 0.58) !important;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.38),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
 .modal-container-OuxEF .modal-dialog-container-DZMKq {
     background-color: #00000093;
     backdrop-filter: var(--backdrop-filter);
@@ -504,7 +555,7 @@ html body {
 }
 
 [class*="player-container"] [class*="menu-layer"] {
-    background: rgba(70, 70, 70, 0.22) !important;
+    background: rgba(42, 42, 46, 0.58) !important;
     border-radius: 50px !important;
     box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.2),
@@ -543,7 +594,7 @@ html body {
 }
 
 [class*="player-container"] [class*="side-drawer-button-layer"] {
-    background: rgba(70, 70, 70, 0.22) !important;
+    background: rgba(42, 42, 46, 0.58) !important;
     border-radius: 999px !important;
     box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.2),
@@ -563,7 +614,7 @@ html body {
 }
 
 .player-container-wIELK .layer-qalDW.menu-layer-HZFG9 {
-    background: rgba(70, 70, 70, 0.22) !important;
+    background: rgba(42, 42, 46, 0.58) !important;
     border-radius: 50px !important;
     box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.2),
@@ -725,9 +776,10 @@ html body {
     margin-top: 0.35rem;
 }
 
-/* scroll fix for hero */
+/* Board hero starts at the window top; horizontal nav overlays it */
+#app [class*="main-nav-bars-container"] [class*="nav-content-container"],
 .main-nav-bars-container-wNjS5 .nav-content-container-zl9hQ {
-    top: calc(var(--horizontal-nav-bar-size) - 80px);
+    top: 0 !important;
 }
 
 /* Hero Section */
@@ -763,7 +815,8 @@ html body {
 .hero-overlay {
     position: absolute;
     width: 100%;
-    padding-left: 6%;
+    padding-left: 0;
+    padding-right: 0;
     bottom: 0;
 
     color: white;
@@ -1878,7 +1931,7 @@ body.ghost-clicking #heroLoadingScreen {
     right: -4rem;
     top: 50%;
     transform: translateY(-50%);
-    background: rgba(70, 70, 70, 0.22) !important;
+    background: rgba(42, 42, 46, 0.58) !important;
     border-radius: 999px !important;
     box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.2),
@@ -1887,6 +1940,32 @@ body.ghost-clicking #heroLoadingScreen {
         inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
     backdrop-filter: var(--backdrop-filter) !important;
     border: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Continue Watching: keep play button above widened cover image */
+[class*="continue-watching-row"] [class*="play-icon-layer"] {
+    z-index: 20 !important;
+    pointer-events: auto !important;
+}
+
+[class*="continue-watching-row"] [class*="play-icon-layer"] [class*="play-icon-outer"] {
+    z-index: 1 !important;
+}
+
+[class*="continue-watching-row"] [class*="play-icon-layer"] [class*="play-icon-"]:not([class*="outer"]):not([class*="background"]) {
+    z-index: 2 !important;
+    position: relative !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+[class*="continue-watching-row"] [class*="poster-image-layer"] {
+    z-index: 1 !important;
+}
+
+[class*="continue-watching-row"] [class*="progress-bar-layer"] {
+    z-index: 12 !important;
+    pointer-events: none !important;
 }
 
 /* ========================= PLAY BUTTON CLEAN HOVER EFFECT ========================= */
@@ -2370,15 +2449,35 @@ body.ghost-clicking #heroLoadingScreen {
     border: 1px solid rgba(255, 255, 255, 0.04) !important;
 }
 
-.multiselect-menu-qMdaj .multiselect-button-XXdgA {
+[class*="multiselect-menu"] {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+[class*="multiselect-menu"]:hover,
+[class*="multiselect-menu"][class*="active"] {
+    background: transparent !important;
+}
+
+[class*="multiselect-menu"] [class*="multiselect-button"] {
     background: rgba(70, 70, 70, 0.22) !important;
     box-shadow:
-        0 8px 0.1px rgba(0, 0, 0, 0.2),
-        0 4px 16px rgba(0, 0, 0, 0.1),
+        0 4px 16px rgba(0, 0, 0, 0.25),
         inset 0 1px 0 rgba(255, 255, 255, 0.15),
         inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
     backdrop-filter: var(--backdrop-filter) !important;
     border: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+[class*="select-choices-wrapper"] [class*="multiselect-menu"] [class*="dropdown"],
+[class*="multiselect-menu"] [class*="dropdown"] {
+    background: rgba(30, 30, 30, 0.95) !important;
+    backdrop-filter: var(--backdrop-filter) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.5),
+        0 4px 16px rgba(0, 0, 0, 0.3) !important;
+    z-index: 100 !important;
 }
 
 .cell-l3eWl.today-G8kuO .heading-TYXvp .day-nttmc {
@@ -2730,6 +2829,7 @@ body.ghost-clicking #heroLoadingScreen {
     backdrop-filter: var(--backdrop-filter);
     border: 1px solid rgba(255, 255, 255, 0.08);
     transition: all 0.3s ease;
+    cursor: pointer;
 }
 
 .enhanced-cast-item:hover {
@@ -3494,4 +3594,49 @@ body.ghost-clicking #heroLoadingScreen {
 .enhanced-text-input::placeholder {
     color: rgba(255, 255, 255, 0.25);
     font-style: italic;
+}
+
+/* ========================= MYSTREMIO: HERO EDGE + STREMIO SCROLLBARS ========================= */
+
+#app [class*="main-nav-bars-container"] {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100% !important;
+}
+
+.hero-slot-szdy9,
+[class*="hero-slot"] {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    margin-left: -1rem !important;
+    margin-right: -1rem !important;
+    width: calc(100% + 2rem) !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+}
+
+#app [class*="board-content-container"] > [class*="board-content"],
+#app [class*="discover-content"] [class*="catalog-container"],
+#app [class*="library-content"],
+#app [class*="addons-list-container"],
+#app [class*="calendar-content"] [class*="content"] {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+#app [class*="board-content-container"] > [class*="board-content"] {
+    padding-right: 1rem !important;
+}
+
+#app [class*="board-content-container"] > [class*="board-content"]::-webkit-scrollbar,
+#app [class*="discover-content"] [class*="catalog-container"]::-webkit-scrollbar,
+#app [class*="library-content"]::-webkit-scrollbar,
+#app [class*="addons-list-container"]::-webkit-scrollbar,
+#app [class*="calendar-content"] [class*="content"]::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
 }

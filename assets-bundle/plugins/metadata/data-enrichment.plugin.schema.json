@@ -1,0 +1,42 @@
+[
+  {
+    "defaultValue": "",
+    "description": "Get your free API key at themoviedb.org/settings/api",
+    "key": "tmdbApiKey",
+    "label": "TMDB API Key",
+    "placeholder": "Enter your TMDB API key",
+    "type": "input"
+  },
+  {
+    "defaultValue": "",
+    "description": "Get your API key at ratingposterdb.com (https://ratingposterdb.com)",
+    "key": "rpdbApiKey",
+    "label": "RPDB API Key",
+    "placeholder": "Enter your RPDB API key",
+    "type": "input"
+  },
+  {
+    "defaultValue": true,
+    "key": "enhancedCast",
+    "label": "Enhanced Cast Section",
+    "type": "toggle"
+  },
+  {
+    "defaultValue": true,
+    "key": "similarTitles",
+    "label": "Similar Titles",
+    "type": "toggle"
+  },
+  {
+    "defaultValue": true,
+    "key": "showCollection",
+    "label": "Show Collection",
+    "type": "toggle"
+  },
+  {
+    "defaultValue": true,
+    "key": "showRatingsOnPosters",
+    "label": "Ratings on Posters",
+    "type": "toggle"
+  }
+]

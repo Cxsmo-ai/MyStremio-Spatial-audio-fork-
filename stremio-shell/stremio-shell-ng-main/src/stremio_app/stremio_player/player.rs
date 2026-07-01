@@ -77,9 +77,11 @@ fn create_shareable_mpv(window_handle: HWND) -> Arc<Mpv> {
         set_property!("quiet", "yes");
         set_property!("hwdec", "auto");
         set_property!("cache", "yes");
-        set_property!("cache-secs", "120");
-        set_property!("demuxer-max-bytes", "1GiB");
-        set_property!("demuxer-readahead-secs", "120");
+        // Fast first frame: small startup cache (user preload boost applies after playback starts).
+        set_property!("cache-secs", "12");
+        set_property!("demuxer-readahead-secs", "12");
+        set_property!("demuxer-max-bytes", "200MiB");
+        set_property!("cache-pause-initial", "no");
         // set_property!("vo", "gpu-next,");
         Ok(())
     });

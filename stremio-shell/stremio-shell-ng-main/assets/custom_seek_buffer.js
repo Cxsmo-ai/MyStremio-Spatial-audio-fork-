@@ -282,9 +282,9 @@
         return 86400;
       }
       const stored = Number(raw);
-      if (Number.isFinite(stored) && stored >= 30) return Math.min(600, stored);
+      if (Number.isFinite(stored) && stored >= 10) return Math.min(600, stored);
     } catch (_) {}
-    return 120;
+    return 10;
   }
 
   function updateEstimatedAhead(current) {

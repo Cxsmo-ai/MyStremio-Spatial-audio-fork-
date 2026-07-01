@@ -8,6 +8,7 @@
   const APP_LOADING_STYLE_ID = 'stremio-custom-app-loading-style';
   const APP_LOADING_MASK_ID = 'stremio-custom-app-loading-mask';
   const TOP_SEAM_FIX_STYLE_ID = 'stremio-custom-top-seam-fix';
+  const SCROLLBAR_FIX_STYLE_ID = 'stremio-custom-scrollbar-fix';
 
   function isPlayerRoute() {
     return /#\/player/.test(location.hash || '');
@@ -72,6 +73,9 @@
         pointer-events: none;
         transition: opacity 120ms ease;
       }
+      #${APP_LOADING_MASK_ID}.content-only {
+        top: var(--horizontal-nav-bar-size, 5.5rem);
+      }
       #${APP_LOADING_MASK_ID}.visible {
         display: block;
         opacity: 1;
@@ -96,22 +100,79 @@
     const style = document.createElement('style');
     style.id = TOP_SEAM_FIX_STYLE_ID;
     style.textContent = `
+      html,
+      body,
+      #app,
       .hero-container,
-      [class*="hero-container"] {
-        border-top: 0 !important;
-      }
+      [class*="hero-container"],
+      [class*="hero-slot"],
       .main-nav-bars-container-wNjS5 .nav-content-container-zl9hQ,
-      [class*="main-nav-bars-container"] [class*="nav-content-container"] {
+      [class*="main-nav-bars-container"],
+      [class*="main-nav-bars-container"] [class*="nav-content-container"],
+      #app nav[class*="horizontal-nav-bar"] {
         border-top: 0 !important;
+        margin-top: 0 !important;
       }
     `;
     (document.head || document.documentElement).appendChild(style);
   }
 
+  function ensureScrollbarFix() {
+    if (document.getElementById(SCROLLBAR_FIX_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = SCROLLBAR_FIX_STYLE_ID;
+    style.textContent = `
+      html {
+        color-scheme: dark;
+      }
+
+      #app [class*="main-nav-bars-container"] {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 100% !important;
+      }
+
+      .hero-slot-szdy9,
+      [class*="hero-slot"] {
+        position: relative !important;
+        left: auto !important;
+        right: auto !important;
+        margin-left: -1rem !important;
+        margin-right: -1rem !important;
+        width: calc(100% + 2rem) !important;
+        max-width: none !important;
+      }
+
+      #app [class*="board-content-container"] > [class*="board-content"],
+      #app [class*="discover-content"] [class*="catalog-container"],
+      #app [class*="library-content"],
+      #app [class*="addons-list-container"],
+      #app [class*="calendar-content"] [class*="content"] {
+        overflow-x: hidden !important;
+        scrollbar-width: none !important;
+      }
+
+      #app [class*="board-content-container"] > [class*="board-content"]::-webkit-scrollbar,
+      #app [class*="discover-content"] [class*="catalog-container"]::-webkit-scrollbar,
+      #app [class*="library-content"]::-webkit-scrollbar,
+      #app [class*="addons-list-container"]::-webkit-scrollbar,
+      #app [class*="calendar-content"] [class*="content"]::-webkit-scrollbar {
+        width: 0 !important;
+        height: 0 !important;
+        display: none !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+    if (window.__stremioCustomScrollbarEnsure) {
+      window.__stremioCustomScrollbarEnsure();
+    }
+  }
+
   let appMaskTimer = null;
-  function showAppLoadingMask(ms = 220) {
+  function showAppLoadingMask(ms = 220, options = {}) {
     const mask = ensureAppLoadingMask();
     if (!mask) return;
+    mask.classList.toggle('content-only', Boolean(options.contentOnly));
     mask.style.display = 'block';
     mask.classList.add('visible');
     if (appMaskTimer) clearTimeout(appMaskTimer);
@@ -174,7 +235,7 @@
   window.__stremioCustomPlayerLoadingEnsure = syncPlayerLoadingState;
 
   window.addEventListener('hashchange', () => {
-    showAppLoadingMask(isPlayerRoute() ? 340 : 190);
+    showAppLoadingMask(isPlayerRoute() ? 340 : 190, { contentOnly: !isPlayerRoute() });
     if (isPlayerRoute()) startWatcher();
     else stopWatcher();
     syncPlayerLoadingState();
@@ -185,6 +246,7 @@
   if (isPlayerRoute()) startWatcher();
   else injectStyles();
   ensureTopSeamFix();
+  ensureScrollbarFix();
   showBootLoadingMaskUntilReady();
 
   console.info('[StremioCustom] Player loading backdrop ready.');
