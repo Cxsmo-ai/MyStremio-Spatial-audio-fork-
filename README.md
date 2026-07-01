@@ -62,45 +62,45 @@ The detail page combines metadata, cast, similar titles, and an extended stream/
 
 ![Metadata and Stream UI](./images/03-detail-metadata-stream-sidebar.png)
 
-### Cinebye Addon Manager
+### 🎞️ Cinebye Addon Manager
 
 [Cinebye](https://cinebye.elfhosted.com/) is integrated so you can manage addons inside Stremio and optionally disable specific sources (for example Cinemeta).
 
 ![Cinebye Addon Manager](./images/04-cinebye-addon-manager.png)
 
-### Favorite subtitle and audio languages
+### 🌐 Favorite subtitle and audio languages
 
 Inside player settings, you can define favorite subtitle and audio languages that act as your preferred language pool.
 This preference layer is used by the quick language actions shown in the next section.
 
 ![Favorite Languages for Subtitles and Audio](./images/05-favorite-languages-subtitles.png)
 
-### Quick Select language shortcuts
+### ⚡ Quick Select language shortcuts
 
 Quick Select reads your favorites and exposes them as one-click subtitle/audio buttons, so switching language is fast and consistent during playback.
 In short: favorites define what is available, Quick Select is the runtime shortcut layer that applies those preferences immediately.
 
 ![Quick Select Language Shortcuts](./images/06-quick-settings.png)
 
-### Settings: themes and plugins
+### ⚙️ Settings: themes and plugins
 
 Themes and plugins can be managed directly from settings, including quick access to the themes/plugins folders.
 
 ![Themes and Plugins Settings](./images/07-01-settings-themes-plugins.png)
 
-### Settings: preload, library backup, Discord
+### ⚙️ Settings: preload, library backup, Discord
 
 Inside **Settings → MyStremio**, you get central controls for buffer/preload, library export/import, and Discord Rich Presence.
 
 ![Preload Library Discord Settings](./images/08-01-settings-preload-library-discord.png)
 
-### TheIntroDB timestamp submission
+### ⏱️ TheIntroDB timestamp submission
 
 Contribute segment timestamps to TheIntroDB while watching. Open the contribute panel from the player, mark times, pick the segment type, and submit — helps improve skip data for everyone.
 
 ![TheIntroDB panel](./images/10-tidb-timestamp.png)<!-- Screenshot: tidb-contribute -->
 
-### Seek buttons
+### ⏩ Seek buttons
 
 Configurable skip-back and skip-forward controls in the player bar — useful for quick rewinds or jumping ahead without scrubbing.
 
