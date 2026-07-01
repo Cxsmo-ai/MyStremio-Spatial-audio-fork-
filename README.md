@@ -12,7 +12,7 @@ Current release: **2.2.0**
 - [✨ Features](#-Features)
 - [🛠️ Patch Notes](#-Patch-Notes)
 
-
+---
 
 ### How MyStremio differs from official Stremio
 
