@@ -25,7 +25,7 @@ Current release: **2.2.0**
 
 ---
 
-### ❓ How MyStremio differs from official Stremio
+###❓ How MyStremio differs from official Stremio
 
 -Improved player tooling (hover timestamp, TheIntroDB/auto-skip options, controllable preload behavior)
 
@@ -42,15 +42,15 @@ Current release: **2.2.0**
 
 ---
 
-## 🚀 Features
+##🚀 Features
 
-### 🏠 Board hero home view
+###🏠 Board hero home view
 
 The board includes a hero section with rotating titles. The Theme is made by [Fxy6969/Stremio-Glass-Theme](https://github.com/Fxy6969/Stremio-Glass-Theme) and just slightly optimized by me.
 
    ![Board Hero Home](./images/01-board-hero.png)
 
-### 🖱️ Hover metadata in catalogs
+###🖱️ Hover metadata in catalogs
 
 While browsing catalogs, hover cards show key information (plot, genres, cast) without forcing a page change.
 
