@@ -97,26 +97,33 @@ In short: favorites define what is available, Quick Select is the runtime shortc
 Themes and plugins can be managed directly from settings, including quick access to the themes/plugins folders.
 
    <p align="center">
-  <img src="./images/07-01-settings-themes-plugins.png" alt="hemes and Plugins Settings" />
+  <img src="./images/07-01-settings-themes-plugins.png" alt="Themes and Plugins Settings" />
 </p>
 
 ### ⚙️ Settings: preload, library backup, Discord
 
 Inside **Settings → MyStremio**, you get central controls for buffer/preload, library export/import, and Discord Rich Presence.
 
-![Preload Library Discord Settings](./images/08-01-settings-preload-library-discord.png)
+  <p align="center">
+  <img src="./images/08-01-settings-preload-library-discord.png" alt="Preload Library Discord Settings" />
+</p>
 
 ### ⏱️ TheIntroDB timestamp submission
 
 Contribute segment timestamps to TheIntroDB while watching. Open the contribute panel from the player, mark times, pick the segment type, and submit — helps improve skip data for everyone.
 
-![TheIntroDB panel](./images/10-tidb-timestamp.png)<!-- Screenshot: tidb-contribute -->
+  <p align="center">
+  <img src="./images/10-tidb-timestamp.png" alt="TheIntroDB panel" />
+</p>
 
 ### ⏩ Seek buttons
 
 Configurable skip-back and skip-forward controls in the player bar — useful for quick rewinds or jumping ahead without scrubbing.
 
-![Seek buttons in Player](./images/09-seek-buttons.png)  ![Seek button controls](./images/09-01-seek-buttons-controls.png)
+ <p align="center">
+  <img src="./images/09-seek-buttons.png" alt="Seek buttons in Player" width="48%" />
+  <img src="./images/09-01-seek-buttons-controls.png" alt="Seek button controls" width="48%" />
+</p>
 
 ---
 
