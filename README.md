@@ -142,8 +142,10 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 - **Plugin and player adjustments** — Updates to stream UI, TheIntroDB skip logic, continue-watching covers, metadata hover panels, and data enrichment mount targeting.
 - **Player shell assets** — Updated player loading overlay, glass-style controls, playback API integration, and seek-buffer handling.
 - **Custom board scrollbar** — Always-visible scrollbar on the board and other main catalog views, alongside mouse-wheel scrolling.
-- **Scroll behavior in panels and menus** — Metadata hover panels and library context menus close when you scroll.
+- **Scroll behavior in panels and menus** — Plugin drop down menu, Metadata hover panels and library context menus behavior fixed.
 - **Navigation during tab switches** — The horizontal navigation bar stays in place while routes load, without jumping or briefly disappearing.
+- **Meta Hover Panel** — Removed doublicated year removed
+- **Plugin Live Updates** — Partially added live updates when plugins are toggled.
 
 ---
 
