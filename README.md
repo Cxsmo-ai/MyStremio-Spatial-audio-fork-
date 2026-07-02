@@ -125,7 +125,7 @@ Contribute segment timestamps to TheIntroDB while watching. Open the contribute 
 Configurable skip-back and skip-forward controls in the player bar — useful for quick rewinds or jumping ahead without scrubbing.
 
  <p align="center">
-  <img src="./images/09-01-seek-buttons-controls.png" alt="Seek button controls" width="63%"/>
+  <img src="./images/09-01-seek-buttons-controls.png" alt="Seek button controls" width="61%"/>
   <img src="./images/09-seek-buttons.png" alt="Seek buttons in Player" width="60%"/>
 </p>
 
