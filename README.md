@@ -126,7 +126,7 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 
  <p align="center">
   <img src="./images/09-01-seek-buttons-controls.png" alt="Seek button controls" width="50%"/>
-  <img src="./images/09-seek-buttons.png" alt="Seek buttons in Player" />
+  <img src="./images/09-seek-buttons.png" alt="Seek buttons in Player" width="55%"/>
 </p>
 
 ---
