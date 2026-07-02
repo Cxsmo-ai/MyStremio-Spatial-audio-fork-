@@ -48,7 +48,10 @@ Current release: **2.2.0**
 
 The board includes a hero section with rotating titles. The Theme is made by [Fxy6969/Stremio-Glass-Theme](https://github.com/Fxy6969/Stremio-Glass-Theme) and just slightly optimized by me.
 
-   ![Board Hero Home](./images/01-board-hero.png)
+   <p align="center">
+  <img src="./images/01-board-hero.png" alt="Board Hero Home" />
+</p>
+   
 
 ### 🖱️ Hover metadata in catalogs
 
