@@ -49,14 +49,14 @@ Current release: **2.2.0**
 The board includes a hero section with rotating titles. The Theme is made by [Fxy6969/Stremio-Glass-Theme](https://github.com/Fxy6969/Stremio-Glass-Theme) and just slightly optimized by me.
 
    <p align="center">
-  <img src="./images/01-board-hero.png" alt="Board Hero Home" width="90%"/>
+  <img src="./images/01-board-hero.png" alt="Board Hero Home" width="1000"/>
 </p>
 
 ### 🖱️ Hover metadata in catalogs
 
    While browsing catalogs, hover cards show key information (plot, genres, cast) without forcing a page change.
    <p align="center">
-  <img src="./images/02-catalog-hover.png" alt="Catalog Hover Metadata" width="90%"/>
+  <img src="./images/02-catalog-hover.png" alt="Catalog Hover Metadata" width="1000"/>
 </p>
 
 
@@ -65,13 +65,17 @@ The board includes a hero section with rotating titles. The Theme is made by [Fx
 The Data Enrichment Plugin by MrBlu03 (if TMDB API-Key is set) offers an enhanced detail page with cast and similar titles.
 The StreamUI pluign offers a clean and modern sidebar with folders to pick streams from. (The plugin works for the follwing addons: Most torrent addons, [WatchHub](https://stremio-addons.net/addons/watchhub), [Ratings Aggregator](https://stremio-addons.net/addons/ratings-aggregator), [IMDb Ratings](https://stremio-addons.net/addons/imdb-ratings), [AfterCredits](https://aftercredits.almosteffective.com/configure.html)).
 
-![Metadata and Stream UI](./images/03-detail-metadata-stream-sidebar.png)
+  <p align="center">
+  <img src="./images/03-detail-metadata-stream-sidebar.png" alt="Metadata and Stream UI" width="1000"/>
+</p>
 
 ### 🎞️ Cinebye Addon Manager
 
 [Cinebye](https://cinebye.elfhosted.com/) is integrated so you can manage addons inside Stremio and optionally disable specific sources (for example Cinemeta).
 
-![Cinebye Addon Manager](./images/04-cinebye-addon-manager.png)
+  <p align="center">
+  <img src="./images/04-cinebye-addon-manager.pngg" alt="Cinebye Addon Manager" width="1000"/>
+</p>
 
 ### 🌐 Favorite subtitle and audio languages
 
@@ -79,7 +83,7 @@ Inside player settings, you can define favorite subtitle and audio languages tha
 This preference layer is used by the quick language actions shown in the next section.
 
    <p align="center">
-  <img src="./images/05-favorite-languages-subtitles.png" alt="Favorite Languages for Subtitles and Audio" />
+  <img src="./images/05-favorite-languages-subtitles.png" alt="Favorite Languages for Subtitles and Audio" width="1000"/>
 </p>
    ![Favorite Languages for Subtitles and Audio]()
 
@@ -89,7 +93,7 @@ Quick Select reads your favorites and exposes them as one-click subtitle/audio b
 In short: favorites define what is available, Quick Select is the runtime shortcut layer that applies those preferences immediately.
 
    <p align="center">
-  <img src="./images/06-quick-settings.png" alt="Quick Select Language Shortcuts" />
+  <img src="./images/06-quick-settings.png" alt="Quick Select Language Shortcuts" width="1000"/>
 </p>
 
 ### ⚙️ Settings: themes and plugins
@@ -97,7 +101,7 @@ In short: favorites define what is available, Quick Select is the runtime shortc
 Themes and plugins can be managed directly from settings, including quick access to the themes/plugins folders.
 
    <p align="center">
-  <img src="./images/07-01-settings-themes-plugins.png" alt="Themes and Plugins Settings" />
+  <img src="./images/07-01-settings-themes-plugins.png" alt="Themes and Plugins Settings" width="1000"/>
 </p>
 
 ### ⚙️ Settings: preload, library backup, Discord
@@ -105,7 +109,7 @@ Themes and plugins can be managed directly from settings, including quick access
 Inside **Settings → MyStremio**, you get central controls for buffer/preload, library export/import, and Discord Rich Presence.
 
   <p align="center">
-  <img src="./images/08-01-settings-preload-library-discord.png" alt="Preload Library Discord Settings" />
+  <img src="./images/08-01-settings-preload-library-discord.png" alt="Preload Library Discord Settings" width="1000"/>
 </p>
 
 ### ⏱️ TheIntroDB timestamp submission
@@ -113,7 +117,7 @@ Inside **Settings → MyStremio**, you get central controls for buffer/preload, 
 Contribute segment timestamps to TheIntroDB while watching. Open the contribute panel from the player, mark times, pick the segment type, and submit — helps improve skip data for everyone.
 
   <p align="center">
-  <img src="./images/10-tidb-timestamp.png" alt="TheIntroDB panel" />
+  <img src="./images/10-tidb-timestamp.png" alt="TheIntroDB panel" width="1000"/>
 </p>
 
 ### ⏩ Seek buttons
