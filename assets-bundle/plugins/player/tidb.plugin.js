@@ -1020,7 +1020,7 @@
 				const segmentList = this.segments[segmentType] || [];
 				for (const segment of segmentList) {
 					const end = segment.end != null ? segment.end : duration;
-					if (currentTime >= segment.start && currentTime <= end) {
+					if (currentTime >= segment.start && currentTime < end) {
 						return {
 							type: segmentType,
 							start: segment.start,
@@ -1100,15 +1100,22 @@
 				return;
 			}
 
+			if (this._autoSkippedKeys.has(this.getAutoSkipKey(seg))) {
+				this.removeActiveButton();
+				this.displayedSegmentType = null;
+				return;
+			}
+
 			if (isAutoSkipEnabled(seg.type)) {
-				this.tryAutoSkip(video, seg);
-				const timeAfterSkip = this.getPlaybackCurrentTime(video);
-				seg = this.findActiveSegment(timeAfterSkip, duration);
-				this.activeSegment = seg;
-				if (!seg) {
-					this.removeActiveButton();
-					this.displayedSegmentType = null;
-					return;
+				if (this.tryAutoSkip(video, seg)) {
+					const timeAfterSkip = this.getPlaybackCurrentTime(video);
+					seg = this.findActiveSegment(timeAfterSkip, duration);
+					this.activeSegment = seg;
+					if (!seg || this._autoSkippedKeys.has(this.getAutoSkipKey(seg))) {
+						this.removeActiveButton();
+						this.displayedSegmentType = null;
+						return;
+					}
 				}
 			}
 
@@ -1253,6 +1260,9 @@
 				}
 
 				const episodeChanged = nextEpisodeId !== this.episodeId;
+				if (episodeChanged || videoChanged || sourceChanged) {
+					this.removeActiveButton();
+				}
 				if (!episodeChanged && !videoChanged && !urlChanged) {
 					const durationMs = getVideoDurationMs(video);
 					if (durationMs != null && durationMs !== this._lastFetchedDurationMs) {
@@ -1857,8 +1867,9 @@
 		}
 
 		removeActiveButton() {
-			const existingButton = document.getElementById(ACTIVE_BTN_ID);
-			if (existingButton) existingButton.remove();
+			document.getElementById(ACTIVE_BTN_ID)?.remove();
+			document.querySelectorAll(".tidb-skip-btn").forEach((button) => button.remove());
+			this.displayedSegmentType = null;
 		}
 
 		showSkipButton(segment) {
@@ -2063,6 +2074,17 @@
 			this.contributePanelOpen = true;
 		}
 
+		hideContributeToast() {
+			if (this.contributeToastTimer) {
+				window.clearTimeout(this.contributeToastTimer);
+				this.contributeToastTimer = null;
+			}
+			const toast = document.getElementById(CONTRIBUTE_TOAST_ID);
+			if (!toast) return;
+			toast.className = "";
+			toast.textContent = "";
+		}
+
 		showContributeToast(message, kind) {
 			if (!message) return;
 			injectContributeStyles();
@@ -2078,13 +2100,15 @@
 				window.clearTimeout(this.contributeToastTimer);
 			}
 			this.contributeToastTimer = window.setTimeout(() => {
-				toast.className = "";
-				toast.textContent = "";
-			}, 12000);
+				this.hideContributeToast();
+			}, 5000);
 		}
 
 		setContributeStatus(message, kind) {
-			if (kind === "success" || kind === "error") {
+			if (kind === "success") {
+				this.closeContributePanel();
+				this.showContributeToast(message, kind);
+			} else if (kind === "error") {
 				this.ensureContributePanelOpen();
 				this.showContributeToast(message, kind);
 			}
@@ -2403,6 +2427,7 @@
 		}
 
 		removeContributeUi() {
+			this.hideContributeToast();
 			this.closeContributePanel();
 			this.resumePlaybackForContribute();
 			this.unlockPlayerOverlay();
@@ -2642,10 +2667,6 @@
 				playbackEpisode: null,
 				resolvedTmdbId: null
 			});
-			if (this.contributeToastTimer) {
-				window.clearTimeout(this.contributeToastTimer);
-				this.contributeToastTimer = null;
-			}
 		}
 
 		destroy() {

@@ -260,8 +260,8 @@
     if (!name || isExcludedAddon(name)) return false;
     if (WATCHHUB_ADDON_RE.test(name)) return false;
     if (streams.some((el) => isWatchHubStream(el))) return false;
-    if (KNOWN_TORRENT_ADDON_RE.test(name)) return streams.length >= 1;
-    if (streams.length < 2) return false;
+    if (!streams.length) return false;
+    if (KNOWN_TORRENT_ADDON_RE.test(name)) return true;
     return streams.some((el) => isTorrentStream(el, box));
   }
 
