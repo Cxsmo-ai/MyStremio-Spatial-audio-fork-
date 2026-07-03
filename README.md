@@ -10,6 +10,7 @@ Current release: **2.2.0**
 ## 📌 Table of Contents
 
 - [📌 Table of Contents](#-table-of-contents)
+- [❤️ Support](#-support)
 - [🚀 Features](#-features)
 - [🛠️ Patch Notes](#️-patch-notes)
 - [💾 Installation](#-installation)
@@ -41,6 +42,9 @@ Current release: **2.2.0**
 
 
 ---
+## ❤️ Support
+
+
 
 ## 🚀 Features
 
