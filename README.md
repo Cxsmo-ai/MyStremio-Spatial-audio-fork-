@@ -40,11 +40,13 @@ Current release: **2.2.0**
 
 -Packaged as a ready-to-use single installer
 
+---
+
+### ❤️ Support
+
+If you want to support my work you can leave a small tip on ko-fi, I would really appreciate it! <3 
 
 ---
-## ❤️ Support
-
-
 
 ## 🚀 Features
 
