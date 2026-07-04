@@ -774,15 +774,7 @@
       background: transparent !important;
       background-color: transparent !important;
     }
-    html.${PLAYER_ROUTE_CLASS} [class*="player-container"] [class*="background-layer"],
-    html.${PLAYER_ROUTE_CLASS} [class*="player-container"] [class*="background-layer"] [class*="image"] {
-      pointer-events: none !important;
-    }
-    html.${PLAYER_ROUTE_CLASS} [class*="player-container"] [class*="buffering-layer"] {
-      background: transparent !important;
-      background-color: transparent !important;
-    }
-    html.${PLAYER_ROUTE_CLASS} [class*="player-container"] > [class*="layer-"]:not([class*="menu"]):not([class*="control"]):not([class*="info"]):not([class*="side-drawer"]):not([class*="indicator"]):not([class*="nav-bar"]) {
+    html.${PLAYER_ROUTE_CLASS} [class*="player-container"] > [class*="layer-"]:not([class*="menu"]):not([class*="control"]):not([class*="info"]):not([class*="side-drawer"]):not([class*="indicator"]):not([class*="nav-bar"]):not([class*="background"]):not([class*="buffering"]) {
       background: transparent !important;
       background-color: transparent !important;
     }
@@ -1310,7 +1302,6 @@
     }
     syncPluginsToRoute();
   });
-
   let maintenanceTimer = null;
   function scheduleMaintenance() {
     if (maintenanceTimer || isPlayerRoute()) return;

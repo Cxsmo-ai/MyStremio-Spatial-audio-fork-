@@ -82,7 +82,7 @@ fn create_shareable_mpv(window_handle: HWND) -> Arc<Mpv> {
         set_property!("demuxer-readahead-secs", "12");
         set_property!("demuxer-max-bytes", "200MiB");
         set_property!("cache-pause-initial", "no");
-        // set_property!("vo", "gpu-next,");
+        set_property!("vo", "gpu-next,");
         Ok(())
     });
     Arc::new(mpv.expect("cannot build MPV"))

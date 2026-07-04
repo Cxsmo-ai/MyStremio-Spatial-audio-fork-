@@ -6,6 +6,13 @@
 
   const VIDEO_ATTR = 'data-stremio-custom-shell-video';
   const STARTUP_CACHE_SECS = 12;
+  const RS = {
+    NOTHING: 0,
+    METADATA: 1,
+    CURRENT: 2,
+    FUTURE: 3,
+    ENOUGH: 4,
+  };
   let shellMsgId = 12000;
   let shimVideo = null;
   let shimState = {
@@ -18,6 +25,7 @@
   let lastSeekTarget = null;
   let lastSeekAt = 0;
   let mpvCacheAheadSec = 0;
+  let mpvCacheAheadReported = false;
   let mpvPause = false;
   let mpvPausedForCache = false;
   let currentStreamPath = '';
@@ -26,6 +34,9 @@
   let streamStartedAt = 0;
   let pollTimer = null;
   let hookInstalled = false;
+  let lastSyncedReadyState = -1;
+  let videoGateOpen = false;
+  const shimmedVideos = new WeakSet();
 
   function isPlayerRoute() {
     return /#\/player/.test(location.hash || '');
@@ -112,11 +123,140 @@
     return null;
   }
 
+  function getManagedVideos() {
+    const videos = [];
+    const seen = new Set();
+    const selectors = [
+      '[class*="player-container"] [class*="video-container"] video',
+      '[class*="player-container"] [class*="rendering"] video',
+      '[class*="player-container"] video',
+    ];
+    for (const selector of selectors) {
+      for (const video of document.querySelectorAll(selector)) {
+        if (seen.has(video)) continue;
+        seen.add(video);
+        videos.push(video);
+      }
+    }
+    return videos;
+  }
+
+  function applyReadyStateShim(video) {
+    if (!video || shimmedVideos.has(video)) return;
+    shimmedVideos.add(video);
+
+    let readyStateValue = RS.NOTHING;
+    const dispatched = Object.create(null);
+
+    Object.defineProperty(video, 'readyState', {
+      configurable: true,
+      get() {
+        return readyStateValue;
+      },
+    });
+
+    video.__stremioSetReadyState = (next, eventNames) => {
+      const prev = readyStateValue;
+      readyStateValue = next;
+      if (!Array.isArray(eventNames)) return;
+      for (const name of eventNames) {
+        const key = `${name}:${next}`;
+        if (dispatched[key]) continue;
+        if (next < prev && name !== 'timeupdate' && name !== 'progress') continue;
+        try {
+          video.dispatchEvent(new Event(name));
+          dispatched[key] = true;
+        } catch (_) {}
+      }
+    };
+
+    video.__stremioResetReadyState = () => {
+      readyStateValue = RS.NOTHING;
+      Object.keys(dispatched).forEach((key) => {
+        delete dispatched[key];
+      });
+    };
+  }
+
+  function isVideoGateOpen() {
+    return videoGateOpen;
+  }
+
+  function closeVideoGate() {
+    videoGateOpen = false;
+    lastSyncedReadyState = -1;
+    document.documentElement.classList.remove('stremio-custom-video-presenting');
+    syncShellVideoState();
+  }
+
+  function openVideoGate() {
+    if (videoGateOpen) return;
+    videoGateOpen = true;
+    playShellPlayback();
+    window.__stremioCustomPlayerTransparencyEnsure?.();
+    document.documentElement.classList.add('stremio-custom-video-presenting');
+    syncShellVideoState();
+    document.dispatchEvent(new CustomEvent('stremio-custom-video-gate-open'));
+  }
+
+  function getMpvSnapshot() {
+    return {
+      hasStream: Boolean(currentStreamPath),
+      position: shimState.currentTime,
+      timeFresh: lastMpvTimeAt > 0 && Date.now() - lastMpvTimeAt < 4000,
+      buffering: mpvPausedForCache,
+      cacheAhead: mpvCacheAheadSec,
+      cacheObserved: mpvCacheAheadReported,
+    };
+  }
+
+  function syncShellVideoState() {
+    if (!isPlayerRoute()) return;
+
+    const videos = getManagedVideos();
+    for (const video of videos) {
+      applyReadyStateShim(video);
+    }
+
+    const hasStream = Boolean(currentStreamPath);
+    const presenting = hasStream && videoGateOpen;
+    const target = presenting ? RS.ENOUGH : RS.NOTHING;
+    const events = presenting
+      ? ['loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough', 'playing']
+      : [];
+
+    if (target !== lastSyncedReadyState) {
+      for (const video of videos) {
+        if (typeof video.__stremioResetReadyState === 'function' && target === RS.NOTHING) {
+          video.__stremioResetReadyState();
+        }
+        if (typeof video.__stremioSetReadyState === 'function') {
+          video.__stremioSetReadyState(target, events);
+        }
+      }
+      lastSyncedReadyState = target;
+    } else if (presenting) {
+      dispatchVideoEvent('timeupdate');
+    }
+
+    document.dispatchEvent(
+      new CustomEvent('stremio-custom-video-gate-changed', {
+        detail: { open: presenting },
+      })
+    );
+  }
+
   function dispatchVideoEvent(name) {
-    if (!shimVideo) return;
-    try {
-      shimVideo.dispatchEvent(new Event(name));
-    } catch (_) {}
+    const videos = getManagedVideos();
+    if (!videos.length && shimVideo) {
+      videos.push(shimVideo);
+    }
+    for (const video of videos) {
+      applyReadyStateShim(video);
+      try {
+        video.dispatchEvent(new Event(name));
+      } catch (_) {}
+    }
   }
 
   function getBufferedEndSec() {
@@ -176,6 +316,7 @@
       dispatchVideoEvent('loadedmetadata');
     }
     if (changed && getPreloadMode() === 'full') maybeBoostPreload();
+    syncShellVideoState();
   }
 
   function updateCurrentTime(nextTime, source) {
@@ -191,6 +332,7 @@
     if (Math.abs(prev - nextTime) >= 0.2 || source === 'user-seek') {
       dispatchVideoEvent('timeupdate');
     }
+    syncShellVideoState();
   }
 
   function parseShellPayload(raw) {
@@ -221,6 +363,12 @@
         lastMpvTimeAt = Date.now();
         updateCurrentTime(seconds, 'mpv');
         maybeBoostPreload();
+        syncShellVideoState();
+        document.dispatchEvent(
+          new CustomEvent('stremio-custom-mpv-time', {
+            detail: { time: seconds },
+          })
+        );
       }
       return;
     }
@@ -231,8 +379,9 @@
         const hadDuration = Number.isFinite(shimState.duration) && shimState.duration > 0;
         updateDuration(seconds);
         if (!hadDuration && seconds > 0 && currentStreamPath) {
-          window.setTimeout(() => kickPlaybackDecoder(shimState.currentTime), 150);
+          window.setTimeout(() => playShellPlayback(), 150);
         }
+        syncShellVideoState();
       }
       return;
     }
@@ -241,8 +390,10 @@
       const seconds = Number(change.data);
       if (Number.isFinite(seconds) && seconds >= 0) {
         mpvCacheAheadSec = seconds;
+        mpvCacheAheadReported = true;
         dispatchVideoEvent('progress');
         maybeBoostPreload();
+        syncShellVideoState();
       }
       return;
     }
@@ -256,7 +407,7 @@
       const wasBuffering = mpvPausedForCache;
       mpvPausedForCache = Boolean(change.data);
       if (wasBuffering && !mpvPausedForCache && currentStreamPath) {
-        window.setTimeout(() => kickPlaybackDecoder(shimState.currentTime), 100);
+        window.setTimeout(() => playShellPlayback(), 100);
       }
       maybeBoostPreload();
       return;
@@ -288,16 +439,17 @@
     preloadBoostApplied = false;
     recoveryMutedUntil = 0;
     lastMpvTimeAt = 0;
+    mpvCacheAheadSec = 0;
+    mpvCacheAheadReported = false;
+    lastSyncedReadyState = -1;
+    closeVideoGate();
     schedulePlaybackKickoff();
-  }
-
-  function kickPlaybackDecoder(seconds) {
-    playShellPlayback();
-    const base = Number(seconds);
-    if (!Number.isFinite(base) || base <= 0) {
-      return;
-    }
-    sendMpvSetProp('time-pos', base + 0.05);
+    syncShellVideoState();
+    document.dispatchEvent(
+      new CustomEvent('stremio-custom-stream-started', {
+        detail: { path: streamPath },
+      })
+    );
   }
 
   function schedulePlaybackKickoff() {
@@ -305,16 +457,7 @@
     const kick = () => {
       if (!isPlayerRoute() || !currentStreamPath) return;
       attempts += 1;
-
-      if (attempts === 1) {
-        playShellPlayback();
-      }
-
-      const startupGrace = Date.now() - streamStartedAt < 4000;
-      const timeNotMoving = lastMpvTimeAt > 0 && Date.now() - lastMpvTimeAt > 1500;
-      if (!startupGrace && attempts >= 3 && timeNotMoving && !mpvPausedForCache && !mpvPause) {
-        kickPlaybackDecoder(shimState.currentTime || readTimeFromDom() || 0);
-      }
+      playShellPlayback();
 
       if (attempts < 10) {
         window.setTimeout(kick, 500);
@@ -345,7 +488,7 @@
       return;
     }
 
-    kickPlaybackDecoder(resumeAt);
+    playShellPlayback();
     recoveryMutedUntil = Date.now() + 2000;
   }
 
@@ -572,6 +715,7 @@
     runPlaybackRecovery();
     maybeBoostPreload();
     dispatchVideoEvent('progress');
+    syncShellVideoState();
   }
 
   function startPolling() {
@@ -594,6 +738,7 @@
     lastSeekTarget = null;
     lastSeekAt = 0;
     mpvCacheAheadSec = 0;
+    mpvCacheAheadReported = false;
     mpvPause = false;
     mpvPausedForCache = false;
     currentStreamPath = '';
@@ -601,6 +746,8 @@
     recoveryMutedUntil = 0;
     streamStartedAt = 0;
     shimVideo = null;
+    lastSyncedReadyState = -1;
+    videoGateOpen = false;
   }
 
   function ensurePlaybackApi() {
@@ -618,6 +765,7 @@
     ensureShellVideo();
     requestMpvObservations();
     startPolling();
+    syncShellVideoState();
   }
 
   window.StremioCustomPlayback = {
@@ -629,6 +777,12 @@
     getBufferStartRatio: () => getBufferStartRatio(),
     getCacheAheadSec: () => mpvCacheAheadSec,
     applyPreloadSettings,
+    isVideoGateOpen,
+    openVideoGate,
+    closeVideoGate,
+    getMpvSnapshot,
+    nudgePlayback: () => playShellPlayback(),
+    isPresentationReady: isVideoGateOpen,
     seekTo: (seconds) => {
       const video = ensureShellVideo();
       if (video) video.currentTime = Number(seconds);

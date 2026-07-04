@@ -61,6 +61,21 @@
     return null;
   }
 
+  function extractImdbId(value) {
+    if (!value || typeof value !== 'string') return null;
+    const match = value.match(/tt\d{7,8}/i);
+    return match ? match[0] : null;
+  }
+
+  function metahubArtwork(imdbId) {
+    if (!imdbId) return null;
+    return {
+      id: imdbId,
+      background: `https://images.metahub.space/background/large/${imdbId}/img`,
+      logo: `https://images.metahub.space/logo/medium/${imdbId}/img`,
+    };
+  }
+
   async function getCoreState(model) {
     try {
       if (window.services?.core?.transport?.getState) {
@@ -85,6 +100,75 @@
     if (!item) return null;
     const links = item.deepLinks || item.deep_links || {};
     return deepLinkToHash(links.player || links.Player);
+  }
+
+  function extractArtworkFromItem(item) {
+    if (!item || typeof item !== 'object') return null;
+    const content = item.content && typeof item.content === 'object' ? item.content : item;
+    const idHint = item.id || content.id || null;
+    const imdbId = extractImdbId(String(idHint || ''));
+
+    if (imdbId) return metahubArtwork(imdbId);
+
+    let background = content.background || item.background || null;
+    let logo = content.logo || item.logo || null;
+    if (!background && !logo) return null;
+    return { id: idHint, background, logo };
+  }
+
+  function artworkFromCardDom(container) {
+    if (!container) return null;
+
+    const posterImg = container.querySelector('img[class*="poster-image"]');
+    const cardLink = container.querySelector('a[href*="imdb"], a[href*="tt"]');
+    const imdbId =
+      posterImg?.dataset?.imdbId ||
+      extractImdbId(posterImg?.getAttribute('src') || posterImg?.src || '') ||
+      extractImdbId(cardLink?.getAttribute('href') || '') ||
+      extractImdbId(container.getAttribute('data-id') || '');
+
+    if (imdbId) return metahubArtwork(imdbId);
+
+    const logoImg = container.querySelector('.enhanced-logo-overlay, img[class*="logo"]');
+    const logoSrc = logoImg?.getAttribute('src') || logoImg?.src || '';
+    if (logoSrc && /images\.metahub\.space\/logo\//.test(logoSrc)) {
+      return { background: null, logo: logoSrc };
+    }
+
+    return null;
+  }
+
+  function emitArtworkHint(artwork) {
+    if (!artwork || (!artwork.background && !artwork.logo)) return;
+    window.StremioCustomPlayerSplash?.cacheArtwork?.(artwork);
+    document.dispatchEvent(new CustomEvent('stremio-custom-player-artwork', { detail: artwork }));
+  }
+
+  function prefetchSplashArtworkSync(container) {
+    const artwork = artworkFromCardDom(container);
+    if (artwork) emitArtworkHint(artwork);
+    return artwork;
+  }
+
+  async function prefetchSplashArtworkAsync(container) {
+    const index = getCardIndex(container);
+    let artwork = null;
+
+    if (index >= 0) {
+      for (const model of ['continue_watching_preview', 'continue_watching']) {
+        const state = await getCoreState(model);
+        const items = state?.items || state?.catalog?.content?.content || [];
+        if (!Array.isArray(items) || !items[index]) continue;
+        const fromItem = extractArtworkFromItem(items[index]);
+        if (fromItem) {
+          artwork = fromItem;
+          break;
+        }
+      }
+    }
+
+    if (!artwork) artwork = artworkFromCardDom(container);
+    if (artwork) emitArtworkHint(artwork);
   }
 
   async function resolvePlayerHash(container) {
@@ -118,17 +202,22 @@
     return false;
   }
 
-  // Stremio MetaItem uses nativeEvent.selectPrevented to skip card navigation.
   document.addEventListener(
     'click',
     (event) => {
-      if (!findPlayLayer(event.target) && !findDismissLayer(event.target)) return;
+      const playLayer = findPlayLayer(event.target);
+      const dismissLayer = findDismissLayer(event.target);
+      if (!playLayer && !dismissLayer) return;
       markSelectPrevented(event);
+
+      if (!playLayer) return;
+      const container = playLayer.closest('[class*="meta-item-container"]');
+      if (!container) return;
+      prefetchSplashArtworkSync(container);
     },
     true
   );
 
-  // Let React handle play first; fall back if we still did not reach the player route.
   document.addEventListener(
     'click',
     (event) => {
@@ -137,6 +226,8 @@
 
       const container = playLayer.closest('[class*="meta-item-container"]');
       if (!container) return;
+
+      void prefetchSplashArtworkAsync(container);
 
       const hashBefore = window.location.hash;
       window.setTimeout(async () => {

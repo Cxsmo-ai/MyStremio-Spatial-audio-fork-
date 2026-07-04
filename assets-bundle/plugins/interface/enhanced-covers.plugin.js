@@ -212,7 +212,7 @@
 
       if (imdbId) {
         // Construct metahub background URL
-        const backgroundSrc = `https://images.metahub.space/background/medium/${imdbId}/img`;
+        const backgroundSrc = `https://images.metahub.space/background/large/${imdbId}/img`;
         const logoSrc = `https://images.metahub.space/logo/medium/${imdbId}/img`;
 
         img.dataset.enhancedCover = "true";
