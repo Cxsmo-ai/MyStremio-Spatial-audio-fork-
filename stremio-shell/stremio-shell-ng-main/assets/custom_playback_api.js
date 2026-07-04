@@ -32,10 +32,9 @@
   let preloadBoostApplied = false;
   let recoveryMutedUntil = 0;
   let streamStartedAt = 0;
+  let sessionNudgeGen = 0;
   let pollTimer = null;
   let hookInstalled = false;
-  let lastSyncedReadyState = -1;
-  let videoGateOpen = false;
   const shimmedVideos = new WeakSet();
 
   function isPlayerRoute() {
@@ -179,25 +178,12 @@
   }
 
   function isVideoGateOpen() {
-    return videoGateOpen;
+    return true;
   }
 
-  function closeVideoGate() {
-    videoGateOpen = false;
-    lastSyncedReadyState = -1;
-    document.documentElement.classList.remove('stremio-custom-video-presenting');
-    syncShellVideoState();
-  }
+  function closeVideoGate() {}
 
-  function openVideoGate() {
-    if (videoGateOpen) return;
-    videoGateOpen = true;
-    playShellPlayback();
-    window.__stremioCustomPlayerTransparencyEnsure?.();
-    document.documentElement.classList.add('stremio-custom-video-presenting');
-    syncShellVideoState();
-    document.dispatchEvent(new CustomEvent('stremio-custom-video-gate-open'));
-  }
+  function openVideoGate() {}
 
   function getMpvSnapshot() {
     return {
@@ -212,51 +198,18 @@
 
   function syncShellVideoState() {
     if (!isPlayerRoute()) return;
-
-    const videos = getManagedVideos();
-    for (const video of videos) {
-      applyReadyStateShim(video);
-    }
-
-    const hasStream = Boolean(currentStreamPath);
-    const presenting = hasStream && videoGateOpen;
-    const target = presenting ? RS.ENOUGH : RS.NOTHING;
-    const events = presenting
-      ? ['loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough', 'playing']
-      : [];
-
-    if (target !== lastSyncedReadyState) {
-      for (const video of videos) {
-        if (typeof video.__stremioResetReadyState === 'function' && target === RS.NOTHING) {
-          video.__stremioResetReadyState();
-        }
-        if (typeof video.__stremioSetReadyState === 'function') {
-          video.__stremioSetReadyState(target, events);
-        }
-      }
-      lastSyncedReadyState = target;
-    } else if (presenting) {
-      dispatchVideoEvent('timeupdate');
-    }
-
-    document.dispatchEvent(
-      new CustomEvent('stremio-custom-video-gate-changed', {
-        detail: { open: presenting },
-      })
-    );
+    const video = ensureShellVideo();
+    if (!video) return;
+    applyReadyStateShim(video);
   }
 
   function dispatchVideoEvent(name) {
-    const videos = getManagedVideos();
-    if (!videos.length && shimVideo) {
-      videos.push(shimVideo);
-    }
-    for (const video of videos) {
-      applyReadyStateShim(video);
-      try {
-        video.dispatchEvent(new Event(name));
-      } catch (_) {}
-    }
+    const video = ensureShellVideo();
+    if (!video) return;
+    applyReadyStateShim(video);
+    try {
+      video.dispatchEvent(new Event(name));
+    } catch (_) {}
   }
 
   function getBufferedEndSec() {
@@ -378,9 +331,6 @@
       if (Number.isFinite(seconds)) {
         const hadDuration = Number.isFinite(shimState.duration) && shimState.duration > 0;
         updateDuration(seconds);
-        if (!hadDuration && seconds > 0 && currentStreamPath) {
-          window.setTimeout(() => playShellPlayback(), 150);
-        }
         syncShellVideoState();
       }
       return;
@@ -406,9 +356,6 @@
     if (change.name === 'paused-for-cache') {
       const wasBuffering = mpvPausedForCache;
       mpvPausedForCache = Boolean(change.data);
-      if (wasBuffering && !mpvPausedForCache && currentStreamPath) {
-        window.setTimeout(() => playShellPlayback(), 100);
-      }
       maybeBoostPreload();
       return;
     }
@@ -441,10 +388,10 @@
     lastMpvTimeAt = 0;
     mpvCacheAheadSec = 0;
     mpvCacheAheadReported = false;
-    lastSyncedReadyState = -1;
-    closeVideoGate();
-    schedulePlaybackKickoff();
-    syncShellVideoState();
+    shimState.currentTime = 0;
+    shimState.duration = NaN;
+    shimState.seeking = false;
+    shimState.metadataLoaded = false;
     document.dispatchEvent(
       new CustomEvent('stremio-custom-stream-started', {
         detail: { path: streamPath },
@@ -452,18 +399,36 @@
     );
   }
 
-  function schedulePlaybackKickoff() {
-    let attempts = 0;
-    const kick = () => {
-      if (!isPlayerRoute() || !currentStreamPath) return;
-      attempts += 1;
+  function scheduleSessionNudge() {
+    sessionNudgeGen += 1;
+    const gen = sessionNudgeGen;
+    window.setTimeout(() => {
+      if (gen !== sessionNudgeGen || !isPlayerRoute() || !currentStreamPath) return;
       playShellPlayback();
+    }, 350);
+    window.setTimeout(() => {
+      if (gen !== sessionNudgeGen || !isPlayerRoute() || !currentStreamPath) return;
+      playShellPlayback();
+    }, 950);
+  }
 
-      if (attempts < 10) {
-        window.setTimeout(kick, 500);
-      }
-    };
-    window.setTimeout(kick, 250);
+  function refreshMpvViewport() {
+    if (!isPlayerRoute() || !window.chrome?.webview?.postMessage) return;
+    sendMpvSetProp('vo', 'gpu-next');
+    if (mpvPause) playShellPlayback();
+  }
+
+  function onPlayerSessionStart() {
+    hookShellMessages();
+    ensureShellVideo();
+    requestMpvObservations();
+    startPolling();
+    scheduleSessionNudge();
+    window.__stremioCustomPlayerTransparencyEnsure?.();
+  }
+
+  function onPlayerSessionEnd() {
+    sessionNudgeGen += 1;
   }
 
   function runPlaybackRecovery() {
@@ -634,6 +599,7 @@
 
   function maybeBoostPreload() {
     if (preloadBoostApplied || !isPlayerRoute()) return;
+    if (Date.now() - streamStartedAt < 45000) return;
 
     const targetSecs = resolvePreloadSecs();
     const wantsFull = getPreloadMode() === 'full';
@@ -712,7 +678,6 @@
       sendMpvObserve('demuxer-cache-time');
     }
 
-    runPlaybackRecovery();
     maybeBoostPreload();
     dispatchVideoEvent('progress');
     syncShellVideoState();
@@ -746,14 +711,11 @@
     recoveryMutedUntil = 0;
     streamStartedAt = 0;
     shimVideo = null;
-    lastSyncedReadyState = -1;
-    videoGateOpen = false;
   }
 
   function ensurePlaybackApi() {
     if (!isPlayerRoute()) {
       if (!window.__stremioCustomPipMode) {
-        pauseShellPlayback();
         stopPolling();
         resetPlaybackState();
         document.querySelector(`video[${VIDEO_ATTR}]`)?.remove();
@@ -781,6 +743,9 @@
     openVideoGate,
     closeVideoGate,
     getMpvSnapshot,
+    refreshMpvViewport,
+    onPlayerSessionStart,
+    onPlayerSessionEnd,
     nudgePlayback: () => playShellPlayback(),
     isPresentationReady: isVideoGateOpen,
     seekTo: (seconds) => {

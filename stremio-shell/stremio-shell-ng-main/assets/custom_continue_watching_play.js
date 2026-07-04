@@ -214,6 +214,7 @@
       const container = playLayer.closest('[class*="meta-item-container"]');
       if (!container) return;
       prefetchSplashArtworkSync(container);
+      void ensurePlayerNavigation(container);
     },
     true
   );
@@ -223,19 +224,9 @@
     (event) => {
       const playLayer = findPlayLayer(event.target);
       if (!playLayer) return;
-
       const container = playLayer.closest('[class*="meta-item-container"]');
       if (!container) return;
-
       void prefetchSplashArtworkAsync(container);
-
-      const hashBefore = window.location.hash;
-      window.setTimeout(async () => {
-        if (/#\/player\//i.test(window.location.hash) && window.location.hash !== hashBefore) {
-          return;
-        }
-        await ensurePlayerNavigation(container);
-      }, 0);
     },
     false
   );

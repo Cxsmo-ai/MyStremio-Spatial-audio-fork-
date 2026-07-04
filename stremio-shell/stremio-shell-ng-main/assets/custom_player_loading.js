@@ -2,61 +2,43 @@
   'use strict';
 
   /**
-   * MyStremio Player Loader
+   * MyStremio Player Session — single authority for player load + MPV visibility.
    *
-   * Uses Stremio's native player loading layers (poster + pulsing logo).
-   * We only: (1) brand them with series artwork, (2) hold the video gate
-   * until MPV is genuinely playing, then (3) let Stremio hide loading itself.
+   * Stremio native layers (poster + pulsing logo) are used while loading.
+   * When MPV is ready we punch a transparent viewport hole and hide those layers.
+   * Does NOT block ShellVideo loaded/buffering signals.
    */
 
-  if (window.__stremioCustomPlayerLoading) return;
-  window.__stremioCustomPlayerLoading = true;
+  if (window.__stremioCustomPlayerSession) return;
+  window.__stremioCustomPlayerSession = true;
 
-  const STYLE_ID = 'stremio-custom-player-loader-style';
-  const PRESENTING_CLASS = 'stremio-custom-video-presenting';
-  const APP_LOADING_STYLE_ID = 'stremio-custom-app-loading-style';
+  const STYLE_ID = 'stremio-custom-player-session-style';
+  const SESSION_CLASS = 'mystremio-player-session';
+  const MPV_VISIBLE_CLASS = 'mystremio-mpv-visible';
   const APP_LOADING_MASK_ID = 'stremio-custom-app-loading-mask';
+  const APP_LOADING_STYLE_ID = 'stremio-custom-app-loading-style';
   const TOP_SEAM_FIX_STYLE_ID = 'stremio-custom-top-seam-fix';
   const SCROLLBAR_FIX_STYLE_ID = 'stremio-custom-scrollbar-fix';
 
-  const MIN_LOAD_MS = 3000;
-  const MAX_LOAD_MS = 14000;
-  const GATE_OPEN_DELAY_MS = 600;
-  const MPV_SETTLE_MS = 1200;
-  const MPV_FRESH_MS = 4000;
-  const MPV_MIN_POSITION = 1.5;
-  const MPV_MIN_SPAN = 1.0;
-  const MPV_TICKS_REQUIRED = 5;
-  const MPV_MIN_CACHE_AHEAD = 0.35;
-  const ARTWORK_RETRY_MAX = 14;
-  const ARTWORK_RETRY_MS = 450;
+  const Phase = { IDLE: 'idle', LOADING: 'loading', VIDEO: 'video' };
+
+  const READY_TIME_SEC = 0.35;
+  const MAX_LOAD_MS = 20000;
+  const VIEWPORT_PUNCH_MS = [0, 80, 200, 450, 900];
+
+  let phase = Phase.IDLE;
+  let sessionId = 0;
+  let loadStartedAt = 0;
+  let pendingSession = false;
+  let maxTimer = null;
+  let viewportTimers = [];
+  let pollTimer = null;
+  let brandObserver = null;
 
   let artwork = { background: null, logo: null, imdbId: null };
-  let loading = false;
-  let loadStartedAt = 0;
-  let mpvTicks = 0;
-  let lastMpvPosition = -1;
-  let firstMpvPosition = -1;
-  let mpvReadySince = 0;
-  let minTimer = null;
-  let maxTimer = null;
-  let artworkRetryTimer = null;
-  let artworkRetryCount = 0;
-  let artworkFetch = null;
-  let brandObserver = null;
-  let containerWatch = null;
-  let pendingLoad = false;
 
   function isPlayerRoute() {
     return /#\/player/.test(location.hash || '');
-  }
-
-  function isUsableImageSrc(src) {
-    return Boolean(src && typeof src === 'string' && !/^data:,?$/.test(src));
-  }
-
-  function isStremioDefaultLogo(src) {
-    return Boolean(src && /stremio_symbol|\/logo\.png/i.test(src));
   }
 
   function extractImdbId(value) {
@@ -74,76 +56,71 @@
     };
   }
 
-  function backgroundRank(src) {
-    if (!isUsableImageSrc(src)) return 0;
-    if (/\/background\/large\//.test(src)) return 100;
-    if (/\/background\/medium\//.test(src)) return 80;
-    if (/images\.metahub\.space\/background\//.test(src)) return 70;
-    if (/images\.metahub\.space\/poster\//.test(src)) return 25;
-    return 10;
+  function isUsableImageSrc(src) {
+    return Boolean(src && typeof src === 'string' && !/^data:,?$/.test(src));
   }
 
-  function logoRank(src) {
-    if (!isUsableImageSrc(src)) return 0;
-    if (/images\.metahub\.space\/logo\//.test(src)) return 100;
-    return 10;
+  function isStremioDefaultLogo(src) {
+    return Boolean(src && /stremio_symbol|\/logo\.png/i.test(src));
   }
 
   function enrichArtwork(background, logo, idHint) {
-    const imdbFromHint = extractImdbId(String(idHint || ''));
-    const imdbFromBg = extractImdbId(background || '');
-    const metahub = metahubFromId(imdbFromHint || imdbFromBg || '');
+    const hub = metahubFromId(idHint || background || '');
     let bg = background || null;
     let lg = logo || null;
-
-    if (metahub) {
-      if (backgroundRank(metahub.background) >= backgroundRank(bg)) bg = metahub.background;
-      if (!lg || logoRank(metahub.logo) > logoRank(lg)) lg = metahub.logo;
+    if (hub) {
+      bg = hub.background;
+      if (!lg || isStremioDefaultLogo(lg)) lg = hub.logo;
     }
-
-    if (bg && /\/poster\//.test(bg) && metahub) bg = metahub.background;
-
     if (!isUsableImageSrc(bg) && !isUsableImageSrc(lg)) return null;
-    const imdbId = imdbFromHint || imdbFromBg || extractImdbId(bg || '') || null;
-    return { background: bg || null, logo: lg || null, imdbId };
+    return {
+      background: bg,
+      logo: lg,
+      imdbId: extractImdbId(idHint || '') || extractImdbId(bg || '') || null,
+    };
   }
 
   function resolveBackgroundUrl() {
-    const hub = metahubFromId(artwork.imdbId || extractImdbId(artwork.background || ''));
-    if (hub?.background) return hub.background;
-    return artwork.background;
+    return metahubFromId(artwork.imdbId || artwork.background)?.background || artwork.background;
   }
 
   function resolveLogoUrl() {
-    const hub = metahubFromId(artwork.imdbId || extractImdbId(artwork.background || ''));
-    if (hub?.logo) return hub.logo;
-    return artwork.logo;
+    return metahubFromId(artwork.imdbId || artwork.background)?.logo || artwork.logo;
   }
 
-  function injectLoaderStyles() {
+  function injectSessionStyles() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      [class*="player-container"] [class*="background-layer"] [class*="image"] {
-        opacity: 0.6 !important;
-        object-fit: cover !important;
+      html.${SESSION_CLASS}.${MPV_VISIBLE_CLASS} [class*="player-container"] {
+        background: transparent !important;
+        background-color: transparent !important;
       }
-      [class*="player-container"] [class*="buffering-layer"] [class*="logo"],
-      [class*="player-container"] [class*="buffering-layer"] img[class*="logo"] {
+      html.${SESSION_CLASS}.${MPV_VISIBLE_CLASS} [class*="player-container"] [class*="video-container"],
+      html.${SESSION_CLASS}.${MPV_VISIBLE_CLASS} [class*="player-container"] [class*="rendering"],
+      html.${SESSION_CLASS}.${MPV_VISIBLE_CLASS} [class*="player-container"] [class*="shell-video"],
+      html.${SESSION_CLASS}.${MPV_VISIBLE_CLASS} [class*="player-container"] > [class*="layer-"]:not([class*="background"]):not([class*="buffering"]):not([class*="control"]):not([class*="nav-bar"]):not([class*="menu"]):not([class*="info"]):not([class*="side-drawer"]) {
+        background: transparent !important;
+        background-color: transparent !important;
+      }
+      html.${SESSION_CLASS}.${MPV_VISIBLE_CLASS} [class*="player-container"] [class*="background-layer"],
+      html.${SESSION_CLASS}.${MPV_VISIBLE_CLASS} [class*="player-container"] [class*="buffering-layer"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      html.${SESSION_CLASS}:not(.${MPV_VISIBLE_CLASS}) [class*="player-container"] [class*="buffering-layer"] img[src*="stremio_symbol"],
+      html.${SESSION_CLASS}:not(.${MPV_VISIBLE_CLASS}) [class*="player-container"] [class*="buffering-layer"] img[src*="/logo.png"] {
+        display: none !important;
+      }
+      html.${SESSION_CLASS}:not(.${MPV_VISIBLE_CLASS}) [class*="player-container"] [class*="buffering-layer"] [class*="logo"],
+      html.${SESSION_CLASS}:not(.${MPV_VISIBLE_CLASS}) [class*="player-container"] [class*="buffering-layer"] img[class*="logo"] {
         max-width: 15rem !important;
         max-height: 15rem !important;
       }
-      [class*="player-container"] [class*="buffering-layer"] img[src*="stremio_symbol"],
-      [class*="player-container"] [class*="buffering-layer"] img[src*="/logo.png"] {
-        display: none !important;
-      }
-      html.${PRESENTING_CLASS} [class*="player-container"] [class*="background-layer"],
-      html.${PRESENTING_CLASS} [class*="player-container"] [class*="buffering-layer"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
+      html.${SESSION_CLASS}:not(.${MPV_VISIBLE_CLASS}) [class*="player-container"] [class*="background-layer"] [class*="image"] {
+        object-fit: cover !important;
       }
     `;
     (document.head || document.documentElement).appendChild(style);
@@ -155,22 +132,12 @@
     style.id = APP_LOADING_STYLE_ID;
     style.textContent = `
       #${APP_LOADING_MASK_ID} {
-        position: fixed;
-        inset: 0;
-        z-index: 119;
-        background: rgb(20, 20, 20);
-        opacity: 0;
-        display: none;
-        pointer-events: none;
-        transition: opacity 120ms ease;
+        position: fixed; inset: 0; z-index: 119;
+        background: rgb(20, 20, 20); opacity: 0; display: none;
+        pointer-events: none; transition: opacity 120ms ease;
       }
-      #${APP_LOADING_MASK_ID}.content-only {
-        top: var(--horizontal-nav-bar-size, 5.5rem);
-      }
-      #${APP_LOADING_MASK_ID}.visible {
-        display: block;
-        opacity: 1;
-      }
+      #${APP_LOADING_MASK_ID}.content-only { top: var(--horizontal-nav-bar-size, 5.5rem); }
+      #${APP_LOADING_MASK_ID}.visible { display: block; opacity: 1; }
     `;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -195,8 +162,7 @@
       [class*="hero-container"], [class*="hero-slot"],
       [class*="main-nav-bars-container"], [class*="nav-content-container"],
       #app nav[class*="horizontal-nav-bar"] {
-        border-top: 0 !important;
-        margin-top: 0 !important;
+        border-top: 0 !important; margin-top: 0 !important;
       }
     `;
     (document.head || document.documentElement).appendChild(style);
@@ -208,25 +174,14 @@
     style.id = SCROLLBAR_FIX_STYLE_ID;
     style.textContent = `
       html { color-scheme: dark; }
-      #app [class*="main-nav-bars-container"] {
-        margin-left: 0 !important;
-        margin-right: 0 !important;
-        width: 100% !important;
-      }
-      [class*="hero-slot"] {
-        position: relative !important;
-        margin-left: -1rem !important;
-        margin-right: -1rem !important;
-        width: calc(100% + 2rem) !important;
-        max-width: none !important;
-      }
+      #app [class*="main-nav-bars-container"] { margin-left: 0 !important; margin-right: 0 !important; width: 100% !important; }
+      [class*="hero-slot"] { position: relative !important; margin-left: -1rem !important; margin-right: -1rem !important; width: calc(100% + 2rem) !important; max-width: none !important; }
       #app [class*="board-content-container"] > [class*="board-content"],
       #app [class*="discover-content"] [class*="catalog-container"],
       #app [class*="library-content"],
       #app [class*="addons-list-container"],
       #app [class*="calendar-content"] [class*="content"] {
-        overflow-x: hidden !important;
-        scrollbar-width: none !important;
+        overflow-x: hidden !important; scrollbar-width: none !important;
       }
     `;
     (document.head || document.documentElement).appendChild(style);
@@ -254,196 +209,143 @@
     showAppLoadingMask(1400);
     document.addEventListener(
       'stremio-custom-bootstrap-ready',
-      () => {
-        setTimeout(() => {
-          document.getElementById(APP_LOADING_MASK_ID)?.classList.remove('visible');
-        }, 60);
-      },
+      () => setTimeout(() => document.getElementById(APP_LOADING_MASK_ID)?.classList.remove('visible'), 60),
       { once: true }
     );
-  }
-
-  function extractArtworkFromRecord(record) {
-    if (!record || typeof record !== 'object') return null;
-    const content = record.content && typeof record.content === 'object' ? record.content : record;
-    const meta = record.metaItem?.content && typeof record.metaItem.content === 'object' ? record.metaItem.content : null;
-    let background =
-      content.background ||
-      meta?.background ||
-      content.poster ||
-      meta?.poster ||
-      record.background ||
-      record.poster ||
-      null;
-    let logo = content.logo || meta?.logo || record.logo || null;
-    const idHint = record.id || content.id || meta?.id || record.imdb_id || content.imdb_id || null;
-
-    return enrichArtwork(background, logo, idHint);
-  }
-
-  function mergeArtwork(patch) {
-    if (!patch || typeof patch !== 'object') return false;
-    const idHint = patch.id || patch.imdb_id || patch.imdbId || artwork.imdbId || null;
-    const enriched = enrichArtwork(
-      patch.background || artwork.background,
-      patch.logo || artwork.logo,
-      idHint
-    );
-    if (!enriched) return false;
-
-    let changed = false;
-    if (isUsableImageSrc(enriched.background) && backgroundRank(enriched.background) >= backgroundRank(artwork.background)) {
-      if (artwork.background !== enriched.background) {
-        artwork.background = enriched.background;
-        changed = true;
-      }
-    }
-    if (isUsableImageSrc(enriched.logo) && logoRank(enriched.logo) >= logoRank(artwork.logo)) {
-      if (artwork.logo !== enriched.logo) {
-        artwork.logo = enriched.logo;
-        changed = true;
-      }
-    }
-    if (enriched.imdbId && artwork.imdbId !== enriched.imdbId) {
-      artwork.imdbId = enriched.imdbId;
-      changed = true;
-    }
-    if (changed) applySeriesBranding();
-    return changed;
-  }
-
-  function hasArtwork() {
-    return isUsableImageSrc(artwork.background) || isUsableImageSrc(artwork.logo);
-  }
-
-  async function getCoreState(model) {
-    try {
-      const transport = window.services?.core?.transport;
-      if (transport?.getState) return await transport.getState(model);
-    } catch (_) {}
-    try {
-      if (window.core?.getState) return await window.core.getState(model);
-    } catch (_) {}
-    return null;
-  }
-
-  async function fetchArtworkFromCore() {
-    const playerState = await getCoreState('player');
-    const fromPlayer = extractArtworkFromRecord(playerState?.metaItem || playerState);
-    if (fromPlayer) return fromPlayer;
-
-    const metaDetails = await getCoreState('meta_details');
-    const fromMeta = extractArtworkFromRecord(metaDetails?.metaItem || metaDetails);
-    if (fromMeta) return fromMeta;
-
-    for (const model of ['continue_watching_preview', 'continue_watching']) {
-      const state = await getCoreState(model);
-      const items = state?.items || state?.catalog?.content?.content || [];
-      if (!Array.isArray(items)) continue;
-      for (const item of items) {
-        const fromItem = extractArtworkFromRecord(item);
-        if (fromItem) return fromItem;
-      }
-    }
-    return null;
-  }
-
-  function scheduleArtworkRetry() {
-    if (!loading) return;
-    if (hasArtwork()) return;
-    if (artworkRetryCount >= ARTWORK_RETRY_MAX) return;
-    if (artworkRetryTimer) return;
-    artworkRetryTimer = window.setTimeout(() => {
-      artworkRetryTimer = null;
-      artworkRetryCount += 1;
-      if (loading) refreshArtwork();
-    }, ARTWORK_RETRY_MS);
-  }
-
-  function refreshArtwork() {
-    if (artworkFetch) return artworkFetch;
-    artworkFetch = fetchArtworkFromCore()
-      .then((resolved) => {
-        if (resolved) mergeArtwork(resolved);
-        if (loading && !hasArtwork()) scheduleArtworkRetry();
-        return resolved;
-      })
-      .finally(() => {
-        artworkFetch = null;
-      });
-    return artworkFetch;
-  }
-
-  function clearLoadTimers() {
-    if (minTimer) {
-      window.clearTimeout(minTimer);
-      minTimer = null;
-    }
-    if (maxTimer) {
-      window.clearTimeout(maxTimer);
-      maxTimer = null;
-    }
-    if (artworkRetryTimer) {
-      window.clearTimeout(artworkRetryTimer);
-      artworkRetryTimer = null;
-    }
   }
 
   function playerRoot() {
     return document.querySelector('[class*="player-container"]');
   }
 
+  function shellVideoLoaded() {
+    const root = playerRoot();
+    if (!root) return false;
+    return !root.querySelector('[class*="background-layer"]');
+  }
+
   function applySeriesBranding() {
+    if (phase !== Phase.LOADING || !isPlayerRoute()) return;
     const root = playerRoot();
     if (!root) return;
 
     const bgUrl = resolveBackgroundUrl();
     if (isUsableImageSrc(bgUrl)) {
-      const poster = root.querySelector(
-        '[class*="background-layer"] img[class*="image"], [class*="background-layer"] img'
-      );
-      if (poster) {
-        poster.setAttribute('src', bgUrl);
-        if (poster.src !== bgUrl) poster.src = bgUrl;
-      }
+      const poster = root.querySelector('[class*="background-layer"] img');
+      if (poster && poster.getAttribute('src') !== bgUrl) poster.setAttribute('src', bgUrl);
     }
 
     const logoUrl = resolveLogoUrl();
     if (isUsableImageSrc(logoUrl)) {
-      const logos = root.querySelectorAll(
-        '[class*="buffering-layer"] img[class*="logo"], [class*="buffering-layer"] img'
-      );
-      for (const logo of logos) {
-        if (isStremioDefaultLogo(logo.getAttribute('src') || logo.src)) {
+      for (const logo of root.querySelectorAll('[class*="buffering-layer"] img')) {
+        const src = logo.getAttribute('src') || '';
+        if (isStremioDefaultLogo(src) || !isUsableImageSrc(src)) {
           logo.setAttribute('src', logoUrl);
-          logo.src = logoUrl;
           logo.style.display = '';
-          continue;
         }
-        logo.setAttribute('src', logoUrl);
-        if (logo.src !== logoUrl) logo.src = logoUrl;
-        logo.style.display = '';
       }
     }
   }
 
-  let brandRefreshTimer = null;
-
-  function startBrandRefresh() {
-    if (brandRefreshTimer) return;
-    brandRefreshTimer = window.setInterval(() => {
-      if (!loading) {
-        stopBrandRefresh();
-        return;
-      }
-      applySeriesBranding();
-    }, 280);
+  function mergeArtwork(patch) {
+    if (!patch || typeof patch !== 'object') return false;
+    const enriched = enrichArtwork(
+      patch.background || artwork.background,
+      patch.logo || artwork.logo,
+      patch.id || patch.imdb_id || patch.imdbId || artwork.imdbId
+    );
+    if (!enriched) return false;
+    artwork = { ...artwork, ...enriched };
+    applySeriesBranding();
+    return true;
   }
 
-  function stopBrandRefresh() {
-    if (!brandRefreshTimer) return;
-    window.clearInterval(brandRefreshTimer);
-    brandRefreshTimer = null;
+  function clearViewportTimers() {
+    for (const id of viewportTimers) window.clearTimeout(id);
+    viewportTimers = [];
+  }
+
+  function punchMpvViewport() {
+    window.__stremioCustomPlayerTransparencyEnsure?.();
+    window.StremioCustomPlayback?.refreshMpvViewport?.();
+
+    const root = playerRoot();
+    if (!root) return;
+
+    root.style.backgroundColor = 'transparent';
+    const transparentSelectors = [
+      '[class*="video-container"]',
+      '[class*="rendering"]',
+      '[class*="shell-video"]',
+    ];
+    for (const sel of transparentSelectors) {
+      for (const el of root.querySelectorAll(sel)) {
+        el.style.backgroundColor = 'transparent';
+      }
+    }
+  }
+
+  function scheduleViewportPunch() {
+    clearViewportTimers();
+    for (const delay of VIEWPORT_PUNCH_MS) {
+      viewportTimers.push(window.setTimeout(punchMpvViewport, delay));
+    }
+  }
+
+  function setPhase(next) {
+    phase = next;
+    const html = document.documentElement;
+    html.classList.toggle(SESSION_CLASS, next !== Phase.IDLE);
+    html.classList.toggle(MPV_VISIBLE_CLASS, next === Phase.VIDEO);
+
+    if (next === Phase.VIDEO) {
+      stopBrandObserver();
+      scheduleViewportPunch();
+    } else if (next === Phase.LOADING) {
+      html.classList.remove(MPV_VISIBLE_CLASS);
+      applySeriesBranding();
+      startBrandObserver();
+      punchMpvViewport();
+    } else {
+      html.classList.remove(MPV_VISIBLE_CLASS);
+      stopBrandObserver();
+      clearViewportTimers();
+    }
+  }
+
+  function mpvReadyForVideo() {
+    const snap = window.StremioCustomPlayback?.getMpvSnapshot?.();
+    if (!snap?.hasStream) return false;
+    if (snap.buffering) return false;
+    if (!snap.timeFresh) return false;
+    if (!Number.isFinite(snap.duration) || snap.duration <= 0) return false;
+    if (snap.position < READY_TIME_SEC) return false;
+    return true;
+  }
+
+  function checkReady() {
+    if (phase !== Phase.LOADING) return;
+    if (shellVideoLoaded() || mpvReadyForVideo()) {
+      setPhase(Phase.VIDEO);
+      window.StremioCustomPlayback?.nudgePlayback?.();
+      scheduleViewportPunch();
+      return true;
+    }
+    return false;
+  }
+
+  function startPoll() {
+    if (pollTimer) return;
+    pollTimer = window.setInterval(() => {
+      if (phase === Phase.LOADING) checkReady();
+      else if (phase === Phase.VIDEO) punchMpvViewport();
+    }, 250);
+  }
+
+  function stopPoll() {
+    if (!pollTimer) return;
+    window.clearInterval(pollTimer);
+    pollTimer = null;
   }
 
   function startBrandObserver() {
@@ -451,238 +353,111 @@
     const root = playerRoot();
     if (!root) return;
     brandObserver = new MutationObserver(() => {
-      if (!loading) return;
-      applySeriesBranding();
+      if (phase === Phase.LOADING) applySeriesBranding();
+      if (phase === Phase.LOADING && shellVideoLoaded()) checkReady();
     });
-    brandObserver.observe(root, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['src', 'class'],
-    });
-    startBrandRefresh();
+    brandObserver.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class'] });
   }
 
   function stopBrandObserver() {
     if (!brandObserver) return;
     brandObserver.disconnect();
     brandObserver = null;
-    stopBrandRefresh();
   }
 
-  function stopContainerWatch() {
-    if (!containerWatch) return;
-    containerWatch.disconnect();
-    containerWatch = null;
-  }
-
-  function watchForPlayerContainer() {
-    if (containerWatch || playerRoot()) return;
-    containerWatch = new MutationObserver(() => {
-      if (!isPlayerRoute() || !loading) {
-        stopContainerWatch();
-        return;
-      }
-      if (playerRoot()) {
-        stopContainerWatch();
-        ensureLoadingPresentation();
-      }
-    });
-    containerWatch.observe(document.body, { childList: true, subtree: true });
-  }
-
-  function ensureLoadingPresentation() {
-    if (!isPlayerRoute() || !loading) return;
-    injectLoaderStyles();
-    window.__stremioCustomPlayerTransparencyEnsure?.();
-    document.documentElement.classList.remove(PRESENTING_CLASS);
-    startBrandObserver();
-    applySeriesBranding();
-    if (!hasArtwork()) refreshArtwork();
-  }
-
-  function resetArtwork() {
-    artwork = { background: null, logo: null, imdbId: null };
-    artworkRetryCount = 0;
-    if (artworkRetryTimer) {
-      window.clearTimeout(artworkRetryTimer);
-      artworkRetryTimer = null;
+  function clearMaxTimer() {
+    if (maxTimer) {
+      window.clearTimeout(maxTimer);
+      maxTimer = null;
     }
   }
 
-  function beginLoading() {
-    loading = true;
+  function beginSession() {
+    if (!isPlayerRoute()) {
+      pendingSession = true;
+      return;
+    }
+
+    pendingSession = false;
+
+    if (phase === Phase.VIDEO) {
+      scheduleViewportPunch();
+      return;
+    }
+
+    sessionId += 1;
     loadStartedAt = Date.now();
-    mpvTicks = 0;
-    lastMpvPosition = -1;
-    firstMpvPosition = -1;
-    mpvReadySince = 0;
-    pendingLoad = false;
+    clearMaxTimer();
 
-    clearLoadTimers();
-    window.StremioCustomPlayback?.closeVideoGate?.();
+    injectSessionStyles();
+    setPhase(Phase.LOADING);
+    startPoll();
 
-    minTimer = window.setTimeout(tryCompleteLoading, MIN_LOAD_MS);
-    maxTimer = window.setTimeout(() => completeLoading('timeout'), MAX_LOAD_MS);
+    applySeriesBranding();
+    window.StremioCustomPlayback?.onPlayerSessionStart?.();
 
-    ensureLoadingPresentation();
-    if (!playerRoot()) watchForPlayerContainer();
-  }
-
-  function completeLoading(reason) {
-    if (!loading && reason !== 'leave') return;
-    clearLoadTimers();
-    stopBrandObserver();
-
-    const openGate = () => {
-      loading = false;
-      mpvReadySince = 0;
-      window.StremioCustomPlayback?.openVideoGate?.();
-      window.setTimeout(() => window.StremioCustomPlayback?.nudgePlayback?.(), 180);
-      window.setTimeout(() => window.StremioCustomPlayback?.nudgePlayback?.(), 520);
-    };
-
-    if (reason === 'ready') {
-      window.setTimeout(openGate, GATE_OPEN_DELAY_MS);
-      return;
-    }
-
-    openGate();
-  }
-
-  function tryCompleteLoading() {
-    if (!loading) return;
-
-    const snap = window.StremioCustomPlayback?.getMpvSnapshot?.();
-    if (!snap?.hasStream) {
-      mpvReadySince = 0;
-      return;
-    }
-    if (snap.buffering) {
-      mpvReadySince = 0;
-      return;
-    }
-    if (!snap.timeFresh) {
-      mpvReadySince = 0;
-      return;
-    }
-    if (snap.position < MPV_MIN_POSITION) {
-      mpvReadySince = 0;
-      return;
-    }
-    if (snap.cacheObserved && snap.cacheAhead < MPV_MIN_CACHE_AHEAD && snap.position < 2.5) {
-      mpvReadySince = 0;
-      return;
-    }
-    if (mpvTicks < MPV_TICKS_REQUIRED) {
-      mpvReadySince = 0;
-      return;
-    }
-    if (firstMpvPosition >= 0 && snap.position - firstMpvPosition < MPV_MIN_SPAN) {
-      mpvReadySince = 0;
-      return;
-    }
-
-    if (!mpvReadySince) mpvReadySince = Date.now();
-    if (Date.now() - mpvReadySince < MPV_SETTLE_MS) return;
-
-    completeLoading('ready');
-  }
-
-  function onMpvTime(event) {
-    if (!loading) return;
-    const pos = Number(event?.detail?.time);
-    if (!Number.isFinite(pos)) return;
-    if (pos > lastMpvPosition) {
-      if (firstMpvPosition < 0 && Date.now() - loadStartedAt >= MIN_LOAD_MS) {
-        firstMpvPosition = pos;
+    maxTimer = window.setTimeout(() => {
+      if (phase === Phase.LOADING) {
+        setPhase(Phase.VIDEO);
+        window.StremioCustomPlayback?.nudgePlayback?.();
+        scheduleViewportPunch();
       }
-      lastMpvPosition = pos;
-      mpvTicks += 1;
-    }
-    if (Date.now() - loadStartedAt >= MIN_LOAD_MS) {
-      tryCompleteLoading();
-    }
+    }, MAX_LOAD_MS);
+  }
+
+  function endSession() {
+    clearMaxTimer();
+    stopPoll();
+    setPhase(Phase.IDLE);
+    pendingSession = false;
+    artwork = { background: null, logo: null, imdbId: null };
+    window.StremioCustomPlayback?.onPlayerSessionEnd?.();
   }
 
   function onStreamStarted() {
-    if (!isPlayerRoute()) {
-      pendingLoad = true;
-      window.StremioCustomPlayback?.closeVideoGate?.();
-      return;
-    }
-    beginLoading();
+    beginSession();
   }
 
   function onPlayerEnter() {
-    window.__stremioCustomPlayerTransparencyEnsure?.();
-
-    if (window.StremioCustomPlayback?.isVideoGateOpen?.() && !pendingLoad && !loading) {
-      document.documentElement.classList.add(PRESENTING_CLASS);
+    if (pendingSession || phase === Phase.IDLE) {
+      beginSession();
       return;
     }
-
-    if (pendingLoad || !loading) {
-      beginLoading();
-      return;
-    }
-
-    ensureLoadingPresentation();
-    if (!playerRoot()) watchForPlayerContainer();
+    if (phase === Phase.VIDEO) scheduleViewportPunch();
+    else punchMpvViewport();
   }
 
   function onPlayerLeave() {
-    loading = false;
-    pendingLoad = false;
-    clearLoadTimers();
-    stopBrandObserver();
-    stopContainerWatch();
-    resetArtwork();
-    document.documentElement.classList.remove(PRESENTING_CLASS);
-    window.StremioCustomPlayback?.closeVideoGate?.();
+    endSession();
+    showAppLoadingMask(190, { contentOnly: true });
   }
 
-  function onArtworkHint(event) {
-    mergeArtwork(event?.detail);
-  }
-
-  window.StremioCustomPlayerSplash = {
-    cacheArtwork: mergeArtwork,
-  };
+  window.StremioCustomPlayerSplash = { cacheArtwork: mergeArtwork };
 
   window.__stremioCustomPlayerLoadingEnsure = () => {
-    if (isPlayerRoute()) {
-      if (!loading && !window.StremioCustomPlayback?.isVideoGateOpen?.()) {
-        onPlayerEnter();
-      } else {
-        applySeriesBranding();
-      }
-    } else {
-      onPlayerLeave();
-    }
+    if (isPlayerRoute()) onPlayerEnter();
+    else onPlayerLeave();
   };
 
   window.addEventListener('hashchange', () => {
-    if (!isPlayerRoute()) {
-      showAppLoadingMask(190, { contentOnly: true });
-      onPlayerLeave();
-      return;
-    }
-    onPlayerEnter();
+    if (!isPlayerRoute()) onPlayerLeave();
+    else onPlayerEnter();
   });
 
   document.addEventListener('stremio-custom-bootstrap-ready', () => {
     if (isPlayerRoute()) onPlayerEnter();
   });
   document.addEventListener('stremio-custom-stream-started', onStreamStarted);
-  document.addEventListener('stremio-custom-mpv-time', onMpvTime);
-  document.addEventListener('stremio-custom-player-artwork', onArtworkHint);
+  document.addEventListener('stremio-custom-mpv-time', () => {
+    if (phase === Phase.LOADING) checkReady();
+  });
+  document.addEventListener('stremio-custom-player-artwork', (e) => mergeArtwork(e?.detail));
 
-  injectLoaderStyles();
+  injectSessionStyles();
   ensureTopSeamFix();
   ensureScrollbarFix();
   showBootLoadingMaskUntilReady();
   if (isPlayerRoute()) onPlayerEnter();
 
-  console.info('[StremioCustom] Native-branded player loader ready.');
+  console.info('[StremioCustom] Player session manager ready.');
 })();

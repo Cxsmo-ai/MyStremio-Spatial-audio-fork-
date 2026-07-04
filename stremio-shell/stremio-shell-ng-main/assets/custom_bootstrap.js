@@ -758,7 +758,9 @@
     html.${PLAYER_ROUTE_CLASS},
     html.${PLAYER_ROUTE_CLASS} body,
     html.${PLAYER_ROUTE_CLASS} #root,
-    html.${PLAYER_ROUTE_CLASS} #root > div {
+    html.${PLAYER_ROUTE_CLASS} #root > div,
+    html.${PLAYER_ROUTE_CLASS} #app,
+    html.${PLAYER_ROUTE_CLASS} #app > div {
       background: transparent !important;
       background-color: transparent !important;
     }
