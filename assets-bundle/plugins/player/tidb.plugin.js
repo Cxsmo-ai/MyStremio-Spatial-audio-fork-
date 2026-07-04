@@ -532,6 +532,75 @@
 		return null;
 	}
 
+	function readTimeFromSeekBarDom() {
+		const labels = document.querySelectorAll('[class*="seek-bar-container"] [class*="label"]');
+		for (const label of labels) {
+			const text = (label.textContent || "").trim();
+			if (!/^\d/.test(text) || text.startsWith("-")) continue;
+			const parsed = parseTimeInput(text);
+			if (parsed != null && Number.isFinite(parsed)) return parsed;
+		}
+		return null;
+	}
+
+	function readDurationFromSeekBarDom() {
+		const labels = Array.from(document.querySelectorAll('[class*="seek-bar-container"] [class*="label"]'));
+		const times = labels
+			.map((label) => parseTimeInput((label.textContent || "").trim()))
+			.filter((value) => value != null && Number.isFinite(value));
+		if (times.length >= 2) return Math.max(...times);
+		return null;
+	}
+
+	function resolvePlaybackTimeSec() {
+		const api = window.StremioCustomPlayback;
+		const snap = api?.getMpvSnapshot?.();
+		const domTime = readTimeFromSeekBarDom();
+
+		if (snap?.timeFresh && Number.isFinite(snap.position)) {
+			if (domTime != null && domTime > snap.position + 1.5) {
+				return domTime;
+			}
+			return snap.position;
+		}
+
+		if (domTime != null) return domTime;
+
+		const shimTime = api?.getCurrentTime?.();
+		if (Number.isFinite(shimTime) && shimTime > 0) return shimTime;
+
+		const video =
+			api?.getVideo?.() ||
+			document.querySelector('[class*="player-container"] video') ||
+			document.querySelector("video");
+		if (video && Number.isFinite(video.currentTime) && video.currentTime > 0) {
+			return video.currentTime;
+		}
+
+		return Number.isFinite(shimTime) ? shimTime : 0;
+	}
+
+	function resolvePlaybackDurationSec() {
+		const api = window.StremioCustomPlayback;
+		const domDuration = readDurationFromSeekBarDom();
+		const shimDuration = api?.getDuration?.();
+		if (Number.isFinite(shimDuration) && shimDuration > 0) {
+			if (domDuration != null && domDuration > shimDuration + 1) {
+				return domDuration;
+			}
+			return shimDuration;
+		}
+		if (domDuration != null && domDuration > 0) return domDuration;
+		const video =
+			api?.getVideo?.() ||
+			document.querySelector('[class*="player-container"] video') ||
+			document.querySelector("video");
+		if (video && Number.isFinite(video.duration) && video.duration > 0) {
+			return video.duration;
+		}
+		return null;
+	}
+
 	function getContributeButtonTemplate() {
 		const container = document.querySelector(
 			'[class*="player-container"] [class*="control-bar-buttons-container"]'
@@ -848,6 +917,7 @@
 			this.contributeSubmitting = false;
 			this.contributeOutsideHandler = null;
 			this.contributeKeyHandler = null;
+			this.contributeDismissGuardUntil = 0;
 			this.contributeFormDraft = null;
 			this.contributeResumeOnClose = false;
 			this.contributeOverlayTimer = null;
@@ -1049,7 +1119,7 @@
 				return true;
 			}
 
-			if (video.currentTime < seg.start || video.currentTime >= seg.end) {
+			if (this.getPlaybackCurrentTime(video) < seg.start || this.getPlaybackCurrentTime(video) >= seg.end) {
 				return false;
 			}
 
@@ -1065,11 +1135,7 @@
 		}
 
 		getPlaybackCurrentTime(video) {
-			const shellTime = window.StremioCustomPlayback?.getCurrentTime?.();
-			if (Number.isFinite(shellTime) && shellTime >= 0) {
-				return shellTime;
-			}
-			return video?.currentTime;
+			return resolvePlaybackTimeSec();
 		}
 
 		syncSkipButton() {
@@ -1950,23 +2016,11 @@
 		}
 
 		getPlaybackTimeSec() {
-			const shimTime = window.StremioCustomPlayback?.getCurrentTime?.();
-			if (Number.isFinite(shimTime) && shimTime >= 0) return shimTime;
-			const video = this.getPlaybackVideo();
-			if (video && Number.isFinite(video.currentTime) && video.currentTime >= 0) {
-				return video.currentTime;
-			}
-			return 0;
+			return resolvePlaybackTimeSec();
 		}
 
 		getPlaybackDurationSec() {
-			const shimDuration = window.StremioCustomPlayback?.getDuration?.();
-			if (Number.isFinite(shimDuration) && shimDuration > 0) return shimDuration;
-			const video = this.getPlaybackVideo();
-			if (video && Number.isFinite(video.duration) && video.duration > 0) {
-				return video.duration;
-			}
-			return null;
+			return resolvePlaybackDurationSec();
 		}
 
 		parseMediaContext() {
@@ -2171,6 +2225,38 @@
 			} catch (_) {}
 		}
 
+		shouldSuppressPlayerPointerEvent(event) {
+			if (this.contributeDismissGuardUntil && Date.now() < this.contributeDismissGuardUntil) {
+				event.preventDefault();
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				return true;
+			}
+			return false;
+		}
+
+		isContributeOutsidePointer(event) {
+			const panelEl = document.getElementById(CONTRIBUTE_PANEL_ID);
+			const btnEl = document.getElementById(CONTRIBUTE_BTN_ID);
+			if (!this.contributePanelOpen || !panelEl) return false;
+			const target = event.target;
+			if (!(target instanceof Node)) return false;
+			if (panelEl.contains(target) || (btnEl && btnEl.contains(target))) return false;
+			return true;
+		}
+
+		handleContributeOutsidePointer(event) {
+			if (this.shouldSuppressPlayerPointerEvent(event)) return;
+			if (this.contributeSubmitting) return;
+			if (!this.isContributeOutsidePointer(event)) return;
+
+			this.contributeDismissGuardUntil = Date.now() + 500;
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			this.closeContributePanel();
+		}
+
 		pausePlaybackForContribute() {
 			this.contributeResumeOnClose = true;
 			const video = this.getPlaybackVideo();
@@ -2290,6 +2376,11 @@
 		}
 
 		openContributePanel() {
+			if (this.contributePanelOpen) {
+				this.positionContributePanel();
+				return;
+			}
+
 			injectContributeStyles();
 			let panel = document.getElementById(CONTRIBUTE_PANEL_ID);
 			if (!panel) {
@@ -2383,6 +2474,7 @@
 			panel.classList.add("open");
 			this.contributePanelOpen = true;
 			this.setContributeStatus("");
+			window.StremioCustomPlayback?.suppressAutoPlay?.();
 			this.pausePlaybackForContribute();
 			this.lockPlayerOverlay();
 			this.startContributeOverlayKeepAlive();
@@ -2390,14 +2482,11 @@
 
 			if (!this.contributeOutsideHandler) {
 				this.contributeOutsideHandler = (event) => {
-					if (this.contributeSubmitting) return;
-					const panelEl = document.getElementById(CONTRIBUTE_PANEL_ID);
-					const btnEl = document.getElementById(CONTRIBUTE_BTN_ID);
-					if (!panelEl || !panelEl.classList.contains("open")) return;
-					if (panelEl.contains(event.target) || btnEl && btnEl.contains(event.target)) return;
-					this.closeContributePanel();
+					this.handleContributeOutsidePointer(event);
 				};
+				document.addEventListener("pointerdown", this.contributeOutsideHandler, true);
 				document.addEventListener("mousedown", this.contributeOutsideHandler, true);
+				document.addEventListener("click", this.contributeOutsideHandler, true);
 			}
 			if (!this.contributeKeyHandler) {
 				this.contributeKeyHandler = (event) => {
@@ -2408,6 +2497,7 @@
 		}
 
 		closeContributePanel() {
+			const wasOpen = this.contributePanelOpen;
 			if (this.contributePanelOpen) {
 				this.saveContributeFormDraft();
 			}
@@ -2416,6 +2506,9 @@
 			this.contributePanelOpen = false;
 			this.resumePlaybackForContribute();
 			this.unlockPlayerOverlay();
+			if (wasOpen) {
+				window.StremioCustomPlayback?.releaseAutoPlay?.();
+			}
 		}
 
 		toggleContributePanel() {
@@ -2434,7 +2527,9 @@
 			document.getElementById(CONTRIBUTE_BTN_ID)?.remove();
 			document.getElementById(CONTRIBUTE_PANEL_ID)?.remove();
 			if (this.contributeOutsideHandler) {
+				document.removeEventListener("pointerdown", this.contributeOutsideHandler, true);
 				document.removeEventListener("mousedown", this.contributeOutsideHandler, true);
+				document.removeEventListener("click", this.contributeOutsideHandler, true);
 				this.contributeOutsideHandler = null;
 			}
 			if (this.contributeKeyHandler) {

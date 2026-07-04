@@ -35,7 +35,20 @@
   let sessionNudgeGen = 0;
   let pollTimer = null;
   let hookInstalled = false;
+  let autoPlaySuppressCount = 0;
   const shimmedVideos = new WeakSet();
+
+  function isAutoPlaySuppressed() {
+    return autoPlaySuppressCount > 0;
+  }
+
+  function suppressAutoPlay() {
+    autoPlaySuppressCount += 1;
+  }
+
+  function releaseAutoPlay() {
+    autoPlaySuppressCount = Math.max(0, autoPlaySuppressCount - 1);
+  }
 
   function isPlayerRoute() {
     return /#\/player/.test(location.hash || '');
@@ -109,6 +122,35 @@
       if (parsed != null) return parsed;
     }
     return null;
+  }
+
+  function resolveCurrentTime() {
+    const domTime = readTimeFromDom();
+    const mpvFresh = lastMpvTimeAt > 0 && Date.now() - lastMpvTimeAt < 4000;
+    const shimTime = Number.isFinite(shimState.currentTime) ? shimState.currentTime : 0;
+
+    if (mpvFresh) {
+      if (domTime != null && domTime > shimTime + 1.5) {
+        return domTime;
+      }
+      return shimTime;
+    }
+
+    if (domTime != null) return domTime;
+    return shimTime;
+  }
+
+  function resolveDuration() {
+    const domDuration = readDurationFromDom();
+    const shimDuration = shimState.duration;
+    if (Number.isFinite(shimDuration) && shimDuration > 0) {
+      if (domDuration != null && domDuration > shimDuration + 1) {
+        return domDuration;
+      }
+      return shimDuration;
+    }
+    if (domDuration != null && domDuration > 0) return domDuration;
+    return shimDuration;
   }
 
   function readDurationFromDom() {
@@ -415,7 +457,11 @@
   function refreshMpvViewport() {
     if (!isPlayerRoute() || !window.chrome?.webview?.postMessage) return;
     sendMpvSetProp('vo', 'gpu-next');
-    if (mpvPause) playShellPlayback();
+    if (isAutoPlaySuppressed()) return;
+    // Only recover unintended startup pauses while the UI still shows playback as active.
+    if (mpvPause && uiShowsPlaying() && Date.now() - streamStartedAt < 20000) {
+      playShellPlayback();
+    }
   }
 
   function onPlayerSessionStart() {
@@ -433,6 +479,7 @@
 
   function runPlaybackRecovery() {
     if (!isPlayerRoute() || !currentStreamPath) return;
+    if (isAutoPlaySuppressed()) return;
     if (Date.now() < recoveryMutedUntil) return;
     if (mpvPausedForCache) return;
     if (Date.now() - streamStartedAt < 5000) return;
@@ -503,6 +550,7 @@
   }
 
   function playShellPlayback() {
+    if (isAutoPlaySuppressed()) return;
     if (!sendMpvSetProp('pause', false)) return;
     mpvPause = false;
   }
@@ -662,9 +710,10 @@
 
     ensureShellVideo();
 
-    if (Date.now() - lastMpvTimeAt >= 2500) {
-      const domTime = readTimeFromDom();
-      if (domTime != null) {
+    const domTime = readTimeFromDom();
+    if (domTime != null) {
+      const mpvFresh = lastMpvTimeAt > 0 && Date.now() - lastMpvTimeAt < 2500;
+      if (!mpvFresh || domTime > shimState.currentTime + 1.5) {
         updateCurrentTime(domTime, 'dom');
       }
     }
@@ -732,8 +781,8 @@
 
   window.StremioCustomPlayback = {
     getVideo: () => ensureShellVideo(),
-    getCurrentTime: () => shimState.currentTime,
-    getDuration: () => shimState.duration,
+    getCurrentTime: () => resolveCurrentTime(),
+    getDuration: () => resolveDuration(),
     getBufferedEnd: () => getBufferedEndSec(),
     getBufferedRatio: () => getBufferedRatio(),
     getBufferStartRatio: () => getBufferStartRatio(),
@@ -744,6 +793,9 @@
     closeVideoGate,
     getMpvSnapshot,
     refreshMpvViewport,
+    suppressAutoPlay,
+    releaseAutoPlay,
+    isAutoPlaySuppressed,
     onPlayerSessionStart,
     onPlayerSessionEnd,
     nudgePlayback: () => playShellPlayback(),
