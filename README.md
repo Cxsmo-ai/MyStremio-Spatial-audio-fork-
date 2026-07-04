@@ -162,6 +162,8 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 - **Dynamic Hero:** On application startup, the Dynamic Hero banner may briefly display an incorrect title before updating.
 - **Cast Search Addon:** The Cast Search Addon is currently not compatible with the StreamUI plugin.
 
+---
+
 ## 💾 Installation
 
 1. Download the latest installer from this repository's **Releases** page.
