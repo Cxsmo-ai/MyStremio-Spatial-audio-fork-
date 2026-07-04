@@ -140,7 +140,7 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 ---
 ### 💡 Planned Features
 
-- **IntroDB integration:** I plan on implementing both TheIntroDb and IntroDB together to get maximum coverage.
+- **IntroDB integration:** I plan on implementing both TheIntroDB and IntroDB together to get maximum coverage.
 - **PiP:** I'm working on a picture in picture video mode
 - **Seek Bar Thumbnail:** I want to add a thumbnail when hovering over the seek bar in the player.
 
