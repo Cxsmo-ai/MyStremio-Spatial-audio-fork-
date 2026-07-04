@@ -28,7 +28,7 @@ Current release: **2.2.0**
 
 ### ❓ How MyStremio differs from official Stremio
 
--MyStremio uses the MPV as the native video player
+-MyStremio uses MPV as the native video player
 
 -Improved player tooling (hover timestamp, TheIntroDB/auto-skip options, controllable preload behavior)
 
