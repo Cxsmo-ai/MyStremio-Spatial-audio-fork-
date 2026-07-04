@@ -222,8 +222,46 @@ impl PartialUi for WebView {
                             }catch(e){}
 
                             try{console.log('Shell JS injected');if(window.self === window.top) {
-                                window.qt={webChannelTransport:{send:window.chrome.webview.postMessage}};
-                                window.chrome.webview.addEventListener('message',ev=>window.qt.webChannelTransport.onmessage(ev));
+                                (function(){
+                                    var webview = window.chrome && window.chrome.webview;
+                                    if (!webview || !webview.postMessage) return;
+                                    if (!webview.__stremioShellPostWrapped) {
+                                        webview.__stremioShellPostWrapped = true;
+                                        var nativePost = webview.postMessage.bind(webview);
+                                        webview.postMessage = function(message) {
+                                            try {
+                                                document.dispatchEvent(new CustomEvent('stremio-shell-outgoing', { detail: message }));
+                                            } catch (e) {}
+                                            if (typeof window.__stremioRewriteShellOutgoing === 'function') {
+                                                try {
+                                                    message = window.__stremioRewriteShellOutgoing(message) || message;
+                                                } catch (e) {}
+                                            }
+                                            return nativePost(message);
+                                        };
+                                    }
+                                    if (!webview.__stremioShellIncomingCapture) {
+                                        webview.__stremioShellIncomingCapture = true;
+                                        webview.addEventListener('message', function(ev) {
+                                            if (typeof window.__stremioRewriteShellIncoming !== 'function') return;
+                                            try {
+                                                var rewritten = window.__stremioRewriteShellIncoming(ev.data);
+                                                if (rewritten != null && rewritten !== ev.data) {
+                                                    Object.defineProperty(ev, 'data', { configurable: true, writable: true, value: rewritten });
+                                                }
+                                            } catch (e) {}
+                                        }, true);
+                                    }
+                                    function relayShellSend(message) {
+                                        return webview.postMessage(message);
+                                    }
+                                    window.qt = { webChannelTransport: { send: relayShellSend } };
+                                    webview.addEventListener('message', function(ev) {
+                                        if (window.qt && window.qt.webChannelTransport) {
+                                            window.qt.webChannelTransport.onmessage && window.qt.webChannelTransport.onmessage(ev);
+                                        }
+                                    });
+                                })();
                                 }}catch(e){}
                             window.addEventListener("load", function() {
                                 try { if (typeof initShellComm === 'function') initShellComm(); } catch(e) {}
@@ -254,13 +292,14 @@ impl PartialUi for WebView {
                                 include_str!("../../../assets/custom_stream_cache.js"),
                                 include_str!("../../../assets/custom_playback_api.js"),
                                 include_str!("../../../assets/custom_seek_buffer.js"),
+                                include_str!("../../../assets/custom_volume_persist.js"),
                             ] {
                                 wv.execute_script(script, |_| Ok(()))
                                     .expect("Cannot add MyStremio module");
                             }
 
                             wv.execute_script(
-                                r#"try{if(document.readyState!=='loading'&&window.runBootstrapOnce)window.runBootstrapOnce();if(window.__stremioCustomPlayerGlassEnsure)window.__stremioCustomPlayerGlassEnsure();if(window.__stremioCustomPlayerLoadingEnsure)window.__stremioCustomPlayerLoadingEnsure();if(window.__stremioCustomPlayerTransparencyEnsure)window.__stremioCustomPlayerTransparencyEnsure();if(window.__stremioCustomPlaybackEnsure)window.__stremioCustomPlaybackEnsure();if(window.__stremioCustomAudioSyncEnsure)window.__stremioCustomAudioSyncEnsure();if(window.__stremioCustomSubtitleSyncEnsure)window.__stremioCustomSubtitleSyncEnsure();if(window.__stremioCustomLibraryFoldersEnsure)window.__stremioCustomLibraryFoldersEnsure();if(window.__stremioCustomCinebyeAddonsEnsure)window.__stremioCustomCinebyeAddonsEnsure();if(window.__stremioCustomApiKeySettingsEnsure)window.__stremioCustomApiKeySettingsEnsure();if(window.__stremioCustomScrollbarEnsure)window.__stremioCustomScrollbarEnsure();}catch(e){console.error('[StremioCustom] post-inject failed',e);}"#,
+                                r#"try{if(document.readyState!=='loading'&&window.runBootstrapOnce)window.runBootstrapOnce();if(window.__stremioCustomPlayerGlassEnsure)window.__stremioCustomPlayerGlassEnsure();if(window.__stremioCustomPlayerLoadingEnsure)window.__stremioCustomPlayerLoadingEnsure();if(window.__stremioCustomPlayerTransparencyEnsure)window.__stremioCustomPlayerTransparencyEnsure();if(window.__stremioCustomPlaybackEnsure)window.__stremioCustomPlaybackEnsure();if(window.__stremioCustomVolumePersistEnsure)window.__stremioCustomVolumePersistEnsure();if(window.__stremioCustomAudioSyncEnsure)window.__stremioCustomAudioSyncEnsure();if(window.__stremioCustomSubtitleSyncEnsure)window.__stremioCustomSubtitleSyncEnsure();if(window.__stremioCustomLibraryFoldersEnsure)window.__stremioCustomLibraryFoldersEnsure();if(window.__stremioCustomCinebyeAddonsEnsure)window.__stremioCustomCinebyeAddonsEnsure();if(window.__stremioCustomApiKeySettingsEnsure)window.__stremioCustomApiKeySettingsEnsure();if(window.__stremioCustomScrollbarEnsure)window.__stremioCustomScrollbarEnsure();}catch(e){console.error('[StremioCustom] post-inject failed',e);}"#,
                                 |_| Ok(()),
                             )
                             .ok();

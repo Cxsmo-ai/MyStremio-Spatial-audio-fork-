@@ -1,3 +1,4 @@
+use crate::stremio_app::custom_api;
 use crate::stremio_app::ipc;
 use crate::stremio_app::RPCResponse;
 use flume::{Receiver, Sender};
@@ -10,8 +11,8 @@ use std::{
 use winapi::shared::windef::HWND;
 
 use crate::stremio_app::stremio_player::{
-    CmdVal, InMsg, InMsgArgs, InMsgFn, PlayerEnded, PlayerEvent, PlayerProprChange, PlayerResponse,
-    PropKey, PropVal,
+    CmdVal, InMsg, InMsgArgs, InMsgFn, MpvCmd, PlayerEnded, PlayerEvent, PlayerProprChange,
+    PlayerResponse, PropKey, PropVal,
 };
 
 struct ObserveProperty {
@@ -85,7 +86,30 @@ fn create_shareable_mpv(window_handle: HWND) -> Arc<Mpv> {
         set_property!("vo", "gpu-next,");
         Ok(())
     });
-    Arc::new(mpv.expect("cannot build MPV"))
+    let mpv = Arc::new(mpv.expect("cannot build MPV"));
+    apply_stored_player_volume(&mpv);
+    mpv
+}
+
+fn cmd_is_loadfile(cmd: &CmdVal) -> bool {
+    matches!(
+        cmd,
+        CmdVal::Single((MpvCmd::Loadfile,))
+            | CmdVal::Double(MpvCmd::Loadfile, _)
+            | CmdVal::Tripple(MpvCmd::Loadfile, _, _)
+            | CmdVal::Quadruple(MpvCmd::Loadfile, _, _, _)
+            | CmdVal::Quintuple(MpvCmd::Loadfile, _, _, _, _)
+    )
+}
+
+fn apply_stored_player_volume(mpv: &Mpv) {
+    let stored = custom_api::player_volume();
+    if let Some(level) = stored.get("level").and_then(|value| value.as_f64()) {
+        let _ = mpv.set_property("volume", level.clamp(0.0, 100.0));
+    }
+    if let Some(muted) = stored.get("muted").and_then(|value| value.as_bool()) {
+        let _ = mpv.set_property("mute", muted);
+    }
 }
 
 fn create_event_thread(
@@ -170,7 +194,11 @@ fn create_message_thread(
             mpv.wake_up();
         };
 
-        let send_command = |cmd: CmdVal| {
+        let send_command = |cmd: &CmdVal| {
+            if cmd_is_loadfile(cmd) {
+                apply_stored_player_volume(&mpv);
+            }
+            let cmd = cmd.clone();
             let a1;
             let a2;
             let a3;
@@ -258,7 +286,7 @@ fn create_message_thread(
                     set_property(name, value, &mpv);
                 }
                 InMsg(InMsgFn::MpvCommand, InMsgArgs::Cmd(cmd)) => {
-                    send_command(cmd);
+                    send_command(&cmd);
                 }
                 msg => {
                     eprintln!("MPV unsupported message: '{msg:?}'");

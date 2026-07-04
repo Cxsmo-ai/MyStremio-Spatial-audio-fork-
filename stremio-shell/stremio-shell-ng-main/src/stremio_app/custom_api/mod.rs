@@ -11,8 +11,8 @@ use std::sync::{Mutex, OnceLock};
 use storage::{
     clear_registered_schema, get_plugin_config, get_plugin_setting, get_registered_schema,
     list_plugin_files, list_theme_files, read_asset_metadata, read_plugin_source, read_theme_css,
-    read_autoskip_settings, read_user_preferences, register_plugin_schema, save_autoskip_settings,
-    save_plugin_setting, save_user_preferences,
+    read_autoskip_settings, read_player_volume, read_user_preferences, register_plugin_schema,
+    save_autoskip_settings, save_player_volume, save_plugin_setting, save_user_preferences,
 };
 
 static REGISTERED_SCHEMAS: OnceLock<Mutex<storage::RegisteredSchemas>> = OnceLock::new();
@@ -89,6 +89,11 @@ pub fn handle_request(message: &Value) -> Option<String> {
         "get-autoskip-settings" => json!(read_autoskip_settings()),
         "save-autoskip-settings" => {
             save_autoskip_settings(&params);
+            json!(true)
+        }
+        "get-player-volume" => json!(read_player_volume()),
+        "save-player-volume" => {
+            save_player_volume(&params);
             json!(true)
         }
         "get-plugin-setting" => {
@@ -173,6 +178,10 @@ fn error_response(id: Value, message: &str) -> String {
         "error": message,
     })
     .to_string()
+}
+
+pub fn player_volume() -> Value {
+    read_player_volume()
 }
 
 pub fn is_custom_request(raw: &str) -> bool {

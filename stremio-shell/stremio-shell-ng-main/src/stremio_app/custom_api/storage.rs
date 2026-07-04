@@ -12,6 +12,7 @@ const THEME_EXT: &str = ".theme.css";
 const PLUGIN_EXT: &str = ".plugin.js";
 const PREFERENCES_FILE: &str = "mystremio-settings.json";
 const AUTOSKIP_FILE: &str = "mystremio-autoskip.json";
+const PLAYER_VOLUME_FILE: &str = "mystremio-player-volume.json";
 
 pub type RegisteredSchemas = HashMap<String, Value>;
 
@@ -127,6 +128,29 @@ pub fn save_autoskip_settings(settings: &Value) {
     }
     if let Ok(content) = serde_json::to_string_pretty(&normalized) {
         let _ = fs::write(autoskip_path(), content);
+    }
+}
+
+pub fn read_player_volume() -> Value {
+    let path = player_volume_path();
+    if !path.exists() {
+        return default_player_volume();
+    }
+
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok())
+        .map(normalize_player_volume)
+        .unwrap_or_else(default_player_volume)
+}
+
+pub fn save_player_volume(settings: &Value) {
+    let normalized = normalize_player_volume(settings.clone());
+    if let Some(parent) = player_volume_path().parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(content) = serde_json::to_string_pretty(&normalized) {
+        let _ = fs::write(player_volume_path(), content);
     }
 }
 
@@ -282,6 +306,33 @@ fn autoskip_path() -> std::path::PathBuf {
     super::paths::app_data_dir().join(AUTOSKIP_FILE)
 }
 
+fn player_volume_path() -> std::path::PathBuf {
+    super::paths::app_data_dir().join(PLAYER_VOLUME_FILE)
+}
+
+fn default_player_volume() -> Value {
+    json!({
+        "level": Value::Null,
+        "muted": Value::Null
+    })
+}
+
+fn normalize_player_volume(value: Value) -> Value {
+    let Some(volume) = value.as_object() else {
+        return default_player_volume();
+    };
+
+    let level = volume
+        .get("level")
+        .and_then(|v| v.as_f64())
+        .map(|level| level.clamp(0.0, 100.0).round());
+
+    json!({
+        "level": level,
+        "muted": volume.get("muted").and_then(|v| v.as_bool())
+    })
+}
+
 fn plugin_config_path(plugin_base_name: &str) -> std::path::PathBuf {
     find_plugin_config_path(plugin_base_name)
         .unwrap_or_else(|| plugins_dir().join(format!("{plugin_base_name}{PLUGIN_CONFIG_EXT}")))
@@ -313,6 +364,10 @@ fn default_preferences() -> Value {
         "autoskip": default_autoskip_preferences(),
         "metadataAddon": "",
         "preload": "120",
+        "volume": {
+            "level": null,
+            "muted": null
+        },
         "discordPresence": {
             "enabled": false,
             "showPaused": true,
@@ -378,6 +433,25 @@ fn normalize_preferences(value: Value) -> Value {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "120".to_string());
+    let volume = value
+        .get("volume")
+        .and_then(|v| v.as_object())
+        .map(|vol| {
+            let level = vol
+                .get("level")
+                .and_then(|v| v.as_f64())
+                .map(|level| level.clamp(0.0, 100.0).round());
+            json!({
+                "level": level,
+                "muted": vol.get("muted").and_then(|v| v.as_bool())
+            })
+        })
+        .unwrap_or_else(|| {
+            json!({
+                "level": Value::Null,
+                "muted": Value::Null
+            })
+        });
     let discord_presence = value
         .get("discordPresence")
         .and_then(|v| v.as_object())
@@ -458,6 +532,7 @@ fn normalize_preferences(value: Value) -> Value {
         "autoskip": autoskip,
         "metadataAddon": metadata_addon,
         "preload": preload,
+        "volume": volume,
         "discordPresence": discord_presence,
         "library": library,
         "language": language,

@@ -115,6 +115,8 @@
     saveUserPreferences: (preferences) => invoke('save-user-preferences', preferences),
     getAutoskipSettings: () => invoke('get-autoskip-settings'),
     saveAutoskipSettings: (settings) => invoke('save-autoskip-settings', settings),
+    getPlayerVolume: () => invoke('get-player-volume'),
+    savePlayerVolume: (settings) => invoke('save-player-volume', settings),
     openExternalUrl: (url) => invoke('open-external-url', { url }),
     invoke,
     info: (pluginBaseName, message) => console.info(`[${pluginBaseName}]`, message),
@@ -171,6 +173,10 @@
     authProfileSyncTimer = window.setInterval(sync, 30000);
   }
 
+  document.addEventListener('stremio-custom-volume-changed', () => {
+    persistUserPreferences();
+  });
+
   function persistUserPreferences() {
     const authProfile = readAuthProfileSnapshot();
     if (authProfile) lastPersistedAuthProfile = authProfile;
@@ -181,6 +187,7 @@
       metadataAddon: getMetadataAddon(),
       language: getLanguagePreferences(),
       preload: getPreloadPreference(),
+      volume: getVolumePreferences(),
       discordPresence: getDiscordPresencePreferences(),
       library: getLibraryPreferences(),
       authProfile,
@@ -202,6 +209,10 @@
   const HORIZONTAL_NAV_PLUGIN = 'interface/horizontal-navigation.plugin.js';
   const METADATA_ADDON_KEY = 'stremio-custom-metadata-addon';
   const PRELOAD_SECS_KEY = 'stremio-custom-preload-secs';
+  const VOLUME_KEYS = {
+    level: 'stremio-custom-player-volume',
+    muted: 'stremio-custom-player-muted',
+  };
   const DISCORD_KEYS = {
     enabled: 'stremio-custom-discord-rp-enabled',
     showPaused: 'stremio-custom-discord-rp-show-paused',
@@ -415,6 +426,62 @@
     const normalized = String(value).trim();
     if (!normalized) return;
     localStorage.setItem(PRELOAD_SECS_KEY, normalized);
+  }
+
+  function getVolumePreferences() {
+    const fromModule = window.StremioCustomVolume?.get?.();
+    if (fromModule && (fromModule.level != null || fromModule.muted != null)) {
+      return {
+        level: fromModule.level,
+        muted: fromModule.muted,
+      };
+    }
+
+    let level = null;
+    let muted = null;
+    try {
+      const levelRaw = localStorage.getItem(VOLUME_KEYS.level);
+      if (levelRaw != null && levelRaw !== '') {
+        const parsed = Number(levelRaw);
+        if (Number.isFinite(parsed)) {
+          level = Math.min(100, Math.max(0, Math.round(parsed)));
+        }
+      }
+      const mutedRaw = localStorage.getItem(VOLUME_KEYS.muted);
+      if (mutedRaw != null) muted = mutedRaw === 'true';
+    } catch (_) {}
+    return { level, muted };
+  }
+
+  function mergeVolumePreferences(diskVolume, localVolume) {
+    const localLevel =
+      typeof localVolume?.level === 'number' && Number.isFinite(localVolume.level)
+        ? localVolume.level
+        : null;
+    const localMuted = typeof localVolume?.muted === 'boolean' ? localVolume.muted : null;
+    const diskLevel =
+      typeof diskVolume?.level === 'number' && Number.isFinite(diskVolume.level)
+        ? diskVolume.level
+        : null;
+    const diskMuted = typeof diskVolume?.muted === 'boolean' ? diskVolume.muted : null;
+
+    return {
+      level: localLevel != null ? localLevel : diskLevel,
+      muted: localMuted != null ? localMuted : diskMuted,
+    };
+  }
+
+  function applyVolumePreferences(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (typeof prefs.level === 'number' && Number.isFinite(prefs.level)) {
+      localStorage.setItem(
+        VOLUME_KEYS.level,
+        String(Math.min(100, Math.max(0, Math.round(prefs.level))))
+      );
+    }
+    if (typeof prefs.muted === 'boolean') {
+      localStorage.setItem(VOLUME_KEYS.muted, prefs.muted ? 'true' : 'false');
+    }
   }
 
   function getDiscordPresencePreferences() {
@@ -662,6 +729,9 @@
         typeof preferences?.metadataAddon === 'string' ? preferences.metadataAddon : '';
       const diskLanguage = preferences?.language;
       const diskPreload = preferences?.preload;
+      const diskVolume = preferences?.volume;
+      const diskPlayerVolume = await api.getPlayerVolume().catch(() => null);
+      const diskVolumeMerged = mergeVolumePreferences(diskVolume, diskPlayerVolume);
       const diskDiscordPresence = preferences?.discordPresence;
       const diskLibrary = preferences?.library;
       const diskOnboarding = preferences?.onboarding;
@@ -693,6 +763,11 @@
       if (diskPreload !== undefined && diskPreload !== null) {
         applyPreloadPreference(diskPreload);
       }
+
+      const mergedVolume = mergeVolumePreferences(diskVolumeMerged, getVolumePreferences());
+      if (mergedVolume.level != null || mergedVolume.muted != null) {
+        applyVolumePreferences(mergedVolume);
+      }
       if (!hasLocalDiscordPrefs && diskDiscordPresence && typeof diskDiscordPresence === 'object') {
         applyDiscordPresencePreferences(diskDiscordPresence);
       }
@@ -716,6 +791,7 @@
         metadataAddon: getMetadataAddon(),
         language: getLanguagePreferences(),
         preload: getPreloadPreference(),
+        volume: getVolumePreferences(),
         discordPresence: getDiscordPresencePreferences(),
         library: getLibraryPreferences(),
         authProfile,
@@ -1230,6 +1306,9 @@
     ensurePlayerTransparencyFix();
     if (typeof window.__stremioCustomPlaybackEnsure === 'function') {
       window.__stremioCustomPlaybackEnsure();
+    }
+    if (typeof window.__stremioCustomVolumePersistEnsure === 'function') {
+      window.__stremioCustomVolumePersistEnsure();
     }
     if (typeof window.__stremioCustomSubtitleSyncEnsure === 'function') {
       window.__stremioCustomSubtitleSyncEnsure();
