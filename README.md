@@ -150,10 +150,10 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 
 ### 2.2.1
 
-- **In-app updater** — Checks GitHub Releases for `MyStremioSetup-v*_x64.exe`, verifies `SHA256SUMS.txt`, and installs updates via the existing Stremio update banner.
+- **In-app updater** — Checks GitHub Releases for `MyStremioSetup-v*_x64.exe`, verifies `SHA256SUMS.txt`, and installs updates via the existing Stremio update banner (still in testing).
 - **Player brightness** — Brightness control in the left player bar with MPV tone adjustment, draggable slider, and compact popup UI.
-- **Hold-left-click speed boost disabled** — Left-click hold no longer forces 2× playback speed while the speed menu stays available.
-- **Player polish** — Seek-buffer hover timing, hold-speed hook stability, and brightness popup layout fixes.
+- **Artifacts** — Fixed artifacts appearing in the subtitle settings and shortcuts section.
+- **StreamUI** — Added Usnet grouping to StreamUI plugin (still in testing). Fixed UI language.
 
 ### 2.2.0
 
