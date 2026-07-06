@@ -1,8 +1,19 @@
 (function () {
   'use strict';
 
+  /**
+   * Continue Watching board helper.
+   *
+   * Play icon: LibItem.onPlayClick navigates via React Router to deepLinks.player.
+   * The card wrapper also opens metaDetails on click — we set selectPrevented on
+   * play clicks so that detail navigation is skipped, without replacing Stremio's
+   * native player route (no raw location.hash unless fallback is needed).
+   */
+
   if (window.__StremioContinueWatchingPlay) return;
   window.__StremioContinueWatchingPlay = true;
+
+  const SESSION_HINT_KEY = 'stremio-cw-playback-hint';
 
   function inContinueWatchingContext(element) {
     if (!element) return false;
@@ -96,10 +107,172 @@
     return null;
   }
 
-  function extractPlayerHash(item) {
-    if (!item) return null;
-    const links = item.deepLinks || item.deep_links || {};
-    return deepLinkToHash(links.player || links.Player);
+  function itemsFromCoreState(state) {
+    if (!state) return [];
+    if (Array.isArray(state.items) && state.items.length) return state.items;
+    if (Array.isArray(state.catalog) && state.catalog.length) return state.catalog;
+    const nested = state.catalog?.content?.content;
+    if (Array.isArray(nested) && nested.length) return nested;
+    return [];
+  }
+
+  function readStyleWidthRatio(element) {
+    if (!element) return null;
+    const inline = element.getAttribute('style') || '';
+    const inlineMatch = inline.match(/width:\s*([\d.]+)%/);
+    if (inlineMatch) {
+      const ratio = Number(inlineMatch[1]) / 100;
+      if (Number.isFinite(ratio) && ratio > 0.004 && ratio < 0.996) return ratio;
+    }
+    try {
+      const computed = window.getComputedStyle(element);
+      const width = parseFloat(computed.width);
+      const parent = element.parentElement;
+      const parentWidth = parent ? parseFloat(window.getComputedStyle(parent).width) : NaN;
+      if (Number.isFinite(width) && Number.isFinite(parentWidth) && parentWidth > 0) {
+        const ratio = width / parentWidth;
+        if (Number.isFinite(ratio) && ratio > 0.004 && ratio < 0.996) return ratio;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function readProgressFromCardDom(container) {
+    if (!container) return null;
+    const progressLayer = container.querySelector('[class*="progress-bar-layer"]');
+    const trackBefore =
+      progressLayer?.querySelector('[class*="track-before"]') ||
+      container.querySelector('[class*="progress-bar-layer"] [class*="track-before"]');
+    const ratio = readStyleWidthRatio(trackBefore);
+    return ratio != null ? ratio : null;
+  }
+
+  function persistPlaybackHint(hint) {
+    if (!hint || !Number.isFinite(hint.duration) || hint.duration <= 0) return;
+    try {
+      sessionStorage.setItem(
+        SESSION_HINT_KEY,
+        JSON.stringify({
+          duration: hint.duration,
+          progress: hint.progress,
+          watched: hint.watched,
+          at: Date.now(),
+        })
+      );
+    } catch (_) {}
+  }
+
+  function extractPlaybackHint(item) {
+    if (!item || typeof item !== 'object') return null;
+    const content = item.content && typeof item.content === 'object' ? item.content : item;
+    const state = item.state || item.libraryItem?.state || content.state || {};
+    const progress = Number(state.progress ?? item.progress ?? content.progress);
+    const watched = Number(
+      state.time ?? state.watched ?? item.watched ?? content.watched ?? content.time
+    );
+    const runtime = Number(
+      content.runtime ??
+        content.duration ??
+        item.runtime ??
+        item.duration ??
+        state.duration ??
+        state.runtime
+    );
+
+    let duration = null;
+    if (Number.isFinite(runtime) && runtime > 0) {
+      duration = runtime;
+    } else if (
+      Number.isFinite(progress) &&
+      progress > 0.01 &&
+      progress < 0.995 &&
+      Number.isFinite(watched) &&
+      watched > 0
+    ) {
+      duration = watched / progress;
+    }
+
+    if (!Number.isFinite(duration) || duration <= 0) return null;
+    return { duration, progress, watched };
+  }
+
+  function emitPlaybackHint(hint) {
+    if (!hint || !Number.isFinite(hint.duration) || hint.duration <= 0) return;
+    window.__stremioPlaybackDurationHint = hint.duration;
+    if (Number.isFinite(hint.progress) && hint.progress > 0) {
+      window.__stremioPlaybackProgressHint = hint.progress;
+    }
+    persistPlaybackHint(hint);
+    document.dispatchEvent(
+      new CustomEvent('stremio-custom-duration-hint', {
+        detail: hint,
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('stremio-custom-duration', {
+        detail: { duration: hint.duration, source: 'continue-watching' },
+      })
+    );
+  }
+
+  function hintFromCardDom(container) {
+    const progress = readProgressFromCardDom(container);
+    if (progress == null) return null;
+    return { progress, watched: null, duration: null };
+  }
+
+  function mergeCardDomHint(hint, container) {
+    const domProgress = readProgressFromCardDom(container);
+    if (domProgress == null) return hint;
+    if (!hint) return { progress: domProgress, watched: null, duration: null };
+    return { ...hint, progress: hint.progress ?? domProgress };
+  }
+
+  async function prefetchPlaybackHint(container) {
+    const index = getCardIndex(container);
+    if (index < 0) return null;
+
+    for (const model of ['continue_watching', 'continue_watching_preview']) {
+      const state = await getCoreState(model);
+      const items = itemsFromCoreState(state);
+      if (!items[index]) continue;
+      const hint = mergeCardDomHint(extractPlaybackHint(items[index]), container);
+      if (hint?.duration) {
+        emitPlaybackHint(hint);
+        return hint;
+      }
+    }
+    const domOnly = hintFromCardDom(container);
+    if (domOnly?.progress) {
+      window.__stremioPlaybackProgressHint = domOnly.progress;
+    }
+    return null;
+  }
+
+  async function resolvePlayerHash(container) {
+    const index = getCardIndex(container);
+    if (index < 0) return null;
+
+    for (const model of ['continue_watching', 'continue_watching_preview']) {
+      const state = await getCoreState(model);
+      const items = itemsFromCoreState(state);
+      if (!items[index]) continue;
+      const links = items[index].deepLinks || items[index].deep_links || {};
+      const hash = deepLinkToHash(links.player || links.Player);
+      if (hash) return hash;
+    }
+
+    return null;
+  }
+
+  function schedulePlayerFallback(container, startHash) {
+    window.setTimeout(async () => {
+      if (/#\/player/.test(location.hash || '')) return;
+      if ((location.hash || '') !== (startHash || '')) return;
+      const hash = await resolvePlayerHash(container);
+      if (!hash || location.hash === hash) return;
+      location.hash = hash;
+    }, 60);
   }
 
   function extractArtworkFromItem(item) {
@@ -155,10 +328,10 @@
     let artwork = null;
 
     if (index >= 0) {
-      for (const model of ['continue_watching_preview', 'continue_watching']) {
+      for (const model of ['continue_watching', 'continue_watching_preview']) {
         const state = await getCoreState(model);
-        const items = state?.items || state?.catalog?.content?.content || [];
-        if (!Array.isArray(items) || !items[index]) continue;
+        const items = itemsFromCoreState(state);
+        if (!items[index]) continue;
         const fromItem = extractArtworkFromItem(items[index]);
         if (fromItem) {
           artwork = fromItem;
@@ -171,35 +344,15 @@
     if (artwork) emitArtworkHint(artwork);
   }
 
-  async function resolvePlayerHash(container) {
-    const index = getCardIndex(container);
-    if (index < 0) return null;
-
-    for (const model of ['continue_watching_preview', 'continue_watching']) {
-      const state = await getCoreState(model);
-      const items = state?.items || state?.catalog?.content?.content || [];
-      if (!Array.isArray(items) || !items[index]) continue;
-      const hash = extractPlayerHash(items[index]);
-      if (hash) return hash;
+  function prefetchForPlay(container) {
+    if (!container) return;
+    prefetchSplashArtworkSync(container);
+    const domProgress = readProgressFromCardDom(container);
+    if (domProgress != null) {
+      window.__stremioPlaybackProgressHint = domProgress;
     }
-
-    return null;
-  }
-
-  function navigateToPlayer(hash) {
-    if (!hash || window.location.hash === hash) return;
-    window.location.hash = hash;
-  }
-
-  async function ensurePlayerNavigation(container) {
-    const hash = await resolvePlayerHash(container);
-    if (hash) {
-      navigateToPlayer(hash);
-      return true;
-    }
-
-    console.warn('[ContinueWatchingPlay] No player deep link for card index', getCardIndex(container));
-    return false;
+    void prefetchSplashArtworkAsync(container);
+    void prefetchPlaybackHint(container);
   }
 
   document.addEventListener(
@@ -207,29 +360,49 @@
     (event) => {
       const playLayer = findPlayLayer(event.target);
       const dismissLayer = findDismissLayer(event.target);
-      if (!playLayer && !dismissLayer) return;
-      markSelectPrevented(event);
 
-      if (!playLayer) return;
-      const container = playLayer.closest('[class*="meta-item-container"]');
-      if (!container) return;
-      prefetchSplashArtworkSync(container);
-      void ensurePlayerNavigation(container);
+      if (playLayer) {
+        markSelectPrevented(event);
+        const container = playLayer.closest('[class*="meta-item-container"]');
+        if (container) {
+          const startHash = location.hash || '';
+          prefetchForPlay(container);
+          schedulePlayerFallback(container, startHash);
+        }
+        return;
+      }
+
+      if (dismissLayer) {
+        markSelectPrevented(event);
+      }
     },
     true
   );
 
   document.addEventListener(
-    'click',
+    'pointerdown',
     (event) => {
       const playLayer = findPlayLayer(event.target);
       if (!playLayer) return;
       const container = playLayer.closest('[class*="meta-item-container"]');
-      if (!container) return;
-      void prefetchSplashArtworkAsync(container);
+      if (container) prefetchForPlay(container);
     },
-    false
+    true
   );
 
-  console.log('[ContinueWatchingPlay] Ready');
+  document.addEventListener(
+    'mouseenter',
+    (event) => {
+      const playLayer = findPlayLayer(event.target);
+      if (!playLayer) return;
+      const container = playLayer.closest('[class*="meta-item-container"]');
+      if (container) {
+        prefetchSplashArtworkSync(container);
+        void prefetchPlaybackHint(container);
+      }
+    },
+    true
+  );
+
+  console.log('[ContinueWatchingPlay] Ready (play → player via Stremio, detail click blocked on play icon).');
 })();

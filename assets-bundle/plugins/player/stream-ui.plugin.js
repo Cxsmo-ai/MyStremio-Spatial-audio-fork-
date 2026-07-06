@@ -12,6 +12,7 @@
 
   const STYLE_ID = 'stream-ui-styles';
   const SETTING_TORRENT = 'enable_torrent_accordions';
+  const SETTING_USENET = 'enable_usenet_accordions';
   const SETTING_RATINGS = 'enable_ratings_aggregator';
   const SETTING_IMDB = 'enable_imdb_ratings';
   const SETTING_WATCHHUB = 'enable_watchhub';
@@ -25,6 +26,7 @@
 
   const state = {
     torrent: true,
+    usenet: true,
     ratings: true,
     imdb: true,
     watchhub: true,
@@ -64,6 +66,7 @@
     }
 
     state.torrent = asToggle(torrent, true);
+    state.usenet = asToggle(await getSetting(SETTING_USENET), true);
     state.ratings = asToggle(await getSetting(SETTING_RATINGS), true);
     state.imdb = asToggle(await getSetting(SETTING_IMDB), true);
     state.watchhub = asToggle(await getSetting(SETTING_WATCHHUB), true);
@@ -174,6 +177,8 @@
     /\b(netflix|amazon|prime|disney|hbo|max|hulu|apple|itunes|paramount|peacock|sky|youtube|google\s*play|rakuten|microsoft|videoland|viaplay|joyn|crunchyroll|wow)\b/i;
   const EXCLUDE_ADDON_RE = /after\s*credits?|ratings?\s*aggregator|aggregator|imdb\s*ratings?|cast\s*search/i;
   const KNOWN_TORRENT_ADDON_RE = /aio\s*streams?(?:\s*nightly)?|store\s*\|?\s*(?:rd|tb)|storerd|storetb|torz|stremthru|torrentio|torrents?\s*db|torrent|comet|mediafusion|debrid|peerflix|sootio|nuvio|knaben|jackett|prowlarr/i;
+  const KNOWN_USENET_ADDON_RE =
+    /usenet|newznab|nzbhydra|nzbdav|altmount|easynews|nntp|stremio\s*nntp|stremthru\s*newz|nzb\s*addon/i;
 
   function isExcludedAddon(name) {
     return EXCLUDE_ADDON_RE.test(name || '');
@@ -248,12 +253,24 @@
   }
 
   function shouldGroupAsTorrent(el, box) {
+    if (!state.torrent) return false;
     if (el.classList.contains('sui-hidden-stream')) return false;
-    const name = getDirectAddonTitle(el);
+    const name = getDirectAddonTitle(el) || resolveTorrentAddonName(el, box);
     if (WATCHHUB_ADDON_RE.test(name || '') || isWatchHubStream(el)) return false;
     if (!name || isExcludedAddon(name)) return false;
+    if (state.usenet && isUsenetStream(el, box) && !isTorrentStream(el, box)) return false;
     if (KNOWN_TORRENT_ADDON_RE.test(name)) return true;
     return isTorrentStream(el, box);
+  }
+
+  function shouldGroupAsUsenet(el, box) {
+    if (!state.usenet) return false;
+    if (el.classList.contains('sui-hidden-stream')) return false;
+    const name = getDirectAddonTitle(el) || resolveTorrentAddonName(el, box);
+    if (WATCHHUB_ADDON_RE.test(name || '') || isWatchHubStream(el)) return false;
+    if (!name || isExcludedAddon(name)) return false;
+    if (KNOWN_USENET_ADDON_RE.test(name)) return true;
+    return isUsenetStream(el, box);
   }
 
   function isTorrentGroup(name, streams, box) {
@@ -263,6 +280,15 @@
     if (!streams.length) return false;
     if (KNOWN_TORRENT_ADDON_RE.test(name)) return true;
     return streams.some((el) => isTorrentStream(el, box));
+  }
+
+  function isUsenetGroup(name, streams, box) {
+    if (!name || isExcludedAddon(name)) return false;
+    if (WATCHHUB_ADDON_RE.test(name)) return false;
+    if (streams.some((el) => isWatchHubStream(el))) return false;
+    if (!streams.length) return false;
+    if (KNOWN_USENET_ADDON_RE.test(name)) return true;
+    return streams.some((el) => isUsenetStream(el, box));
   }
 
   function visibleLinks(box) {
@@ -276,8 +302,8 @@
 
     for (let i = 0; i < links.length; i++) {
       const el = links[i];
-      const name = getDirectAddonTitle(el);
-      if (WATCHHUB_ADDON_RE.test(name || '') || isWatchHubStream(el)) continue;
+      if (!shouldGroupAsTorrent(el, box)) continue;
+      const name = getDirectAddonTitle(el) || resolveTorrentAddonName(el, box);
       if (!name || isExcludedAddon(name)) continue;
       const key = `torrent:${name}`;
       if (!map.has(key)) {
@@ -292,6 +318,31 @@
     return order
       .map((k) => map.get(k))
       .filter((g) => isTorrentGroup(g.name, g.streams, box));
+  }
+
+  function collectUsenetGroups(box) {
+    const links = visibleLinks(box);
+    const map = new Map();
+    const order = [];
+
+    for (let i = 0; i < links.length; i++) {
+      const el = links[i];
+      if (!shouldGroupAsUsenet(el, box)) continue;
+      const name = getDirectAddonTitle(el) || resolveTorrentAddonName(el, box);
+      if (!name || isExcludedAddon(name)) continue;
+      const key = `usenet:${name}`;
+      if (!map.has(key)) {
+        map.set(key, { key, name, streams: [], firstIdx: i });
+        order.push(key);
+      }
+      const g = map.get(key);
+      g.firstIdx = Math.min(g.firstIdx, i);
+      if (!g.streams.includes(el)) g.streams.push(el);
+    }
+
+    return order
+      .map((k) => map.get(k))
+      .filter((g) => isUsenetGroup(g.name, g.streams, box));
   }
 
   function getTopLevelStreamLinks(box) {
@@ -491,7 +542,29 @@
 `;
   }
 
-  // ── Torrent accordions ──────────────────────────────────────────────────────
+  // ── Torrent / Usenet accordions ─────────────────────────────────────────────
+
+  function isUsenetStream(el, box) {
+    const name = getDirectAddonTitle(el) || resolveTorrentAddonName(el, box);
+    if (isExcludedAddon(name)) return false;
+    if (el.classList.contains('sui-hidden-stream')) return false;
+
+    const text = getStreamText(el);
+    const full = `${name}\n${text}`;
+
+    if (/\[SN\]/i.test(full)) return true;
+    if (/\bNZB(?:s)?\b/i.test(full)) return true;
+    if (/\busenet\b/i.test(full)) return true;
+    if (/📰/.test(text)) return true;
+    if (/\[(?:NNTP|NW|EN|UNC)\]/i.test(full)) return true;
+    if (/\bnewznab\b/i.test(full)) return true;
+    if (/\bnzbhydra\b/i.test(full)) return true;
+    if (/\beasynews\b/i.test(full)) return true;
+    if (KNOWN_USENET_ADDON_RE.test(name || '')) return true;
+
+    if (isTorrentStream(el, box)) return false;
+    return false;
+  }
 
   function isTorrentStream(el, box) {
     const name = getDirectAddonTitle(el);
@@ -556,6 +629,9 @@
       if (state.torrent) {
         groups.push(...collectTorrentGroups(box).map((g) => ({ ...g, type: 'torrent', icon: '▶' })));
       }
+      if (state.usenet) {
+        groups.push(...collectUsenetGroups(box).map((g) => ({ ...g, type: 'usenet', icon: '📰' })));
+      }
       groups.push(...collectWatchHubGroups(box));
       groups.sort((a, b) => (a.firstIdx ?? 0) - (b.firstIdx ?? 0));
       return groups;
@@ -610,10 +686,15 @@
     }
 
     function classifyForAccordion(el, box) {
-      if (!state.torrent || !shouldGroupAsTorrent(el, box)) return null;
-      const name = getDirectAddonTitle(el);
-      if (!name || !isTorrentGroup(name, [el], box)) return null;
-      return { type: 'torrent', name };
+      const name = getDirectAddonTitle(el) || resolveTorrentAddonName(el, box);
+      if (!name) return null;
+      if (state.usenet && shouldGroupAsUsenet(el, box) && isUsenetGroup(name, [el], box)) {
+        return { type: 'usenet', name };
+      }
+      if (state.torrent && shouldGroupAsTorrent(el, box) && isTorrentGroup(name, [el], box)) {
+        return { type: 'torrent', name };
+      }
+      return null;
     }
 
     function findAccordion(type, name) {
@@ -623,7 +704,7 @@
     }
 
     function accordionSubLabel(type, count) {
-      return count === 1 ? '1 Stream gefunden' : `${count} Streams gefunden`;
+      return count === 1 ? '1 stream found' : `${count} streams found`;
     }
 
     function updateAccordionCounts() {
@@ -644,7 +725,7 @@
 
       for (const el of visibleLinks(box)) {
         if (el.closest('.sui-aio-body')) continue;
-        if (!getDirectAddonTitle(el)) continue;
+        if (!getDirectAddonTitle(el) && !resolveTorrentAddonName(el, box)) continue;
         const meta = classifyForAccordion(el, box);
         if (!meta) continue;
         const acc = findAccordion(meta.type, meta.name);
@@ -679,11 +760,19 @@
 
         for (const stream of Array.from(body.children)) {
           if (stream.nodeType !== 1) continue;
-          const direct = getDirectAddonTitle(stream);
+          const direct = getDirectAddonTitle(stream) || resolveTorrentAddonName(stream, box);
           if (!direct) continue;
-          if (direct === accName) continue;
+          const accType = acc.getAttribute('data-sui-acc') || '';
+          if (direct === accName && accType) {
+            const meta = classifyForAccordion(stream, box);
+            if (meta && meta.type === accType) continue;
+          }
 
-          const target = findAccordion('torrent', direct);
+          const meta = classifyForAccordion(stream, box);
+          if (!meta) continue;
+          if (meta.type === accType && meta.name === accName) continue;
+
+          const target = findAccordion(meta.type, meta.name);
           if (target) {
             target.querySelector('.sui-aio-body')?.appendChild(stream);
             changed = true;
@@ -1203,13 +1292,13 @@
       crunchyroll: { slug: 'crunchyroll', color: '#f47521' },
     };
     const BADGE = {
-      subscription: { label: 'Abo', cls: 'sui-wh-sub' },
-      flatrate: { label: 'Abo', cls: 'sui-wh-sub' },
-      buy: { label: 'Kaufen', cls: 'sui-wh-buy' },
-      purchase: { label: 'Kaufen', cls: 'sui-wh-buy' },
-      rent: { label: 'Leihen', cls: 'sui-wh-rent' },
-      free: { label: 'Gratis', cls: 'sui-wh-free' },
-      ads: { label: 'Werbung', cls: 'sui-wh-free' },
+      subscription: { label: 'Sub', cls: 'sui-wh-sub' },
+      flatrate: { label: 'Sub', cls: 'sui-wh-sub' },
+      buy: { label: 'Buy', cls: 'sui-wh-buy' },
+      purchase: { label: 'Buy', cls: 'sui-wh-buy' },
+      rent: { label: 'Rent', cls: 'sui-wh-rent' },
+      free: { label: 'Free', cls: 'sui-wh-free' },
+      ads: { label: 'Ads', cls: 'sui-wh-free' },
       stream: { label: 'Stream', cls: 'sui-wh-sub' },
     };
 
@@ -1379,8 +1468,8 @@
 <div class="sui-watchhub-header" role="button" tabindex="0" aria-expanded="${isOpen() ? 'true' : 'false'}">
   <div class="sui-panel-icon">▶</div>
   <div class="sui-watchhub-meta">
-    <div class="sui-panel-title">Verfügbar bei</div>
-    <div class="sui-panel-sub">${providers.length} Streaming-Dienst${providers.length === 1 ? '' : 'e'}</div>
+    <div class="sui-panel-title">Available on</div>
+    <div class="sui-panel-sub">${providers.length} streaming service${providers.length === 1 ? '' : 's'}</div>
   </div>
   <span class="sui-watchhub-badge">${providers.length}</span>
   <span class="sui-watchhub-caret">▾</span>
@@ -1473,7 +1562,7 @@
 
     ratingsBundle.build(box);
 
-    if (state.torrent) accordions.build(box);
+    if (state.torrent || state.usenet) accordions.build(box);
     else accordions.teardown();
   }
 

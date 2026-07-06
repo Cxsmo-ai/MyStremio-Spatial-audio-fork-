@@ -769,6 +769,27 @@
 				font-size: 0.84rem;
 				margin-bottom: 0.55rem;
 			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-segment-row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.4rem;
+				margin-bottom: 0.65rem;
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-segment-row .tidb-contribute-chip {
+				flex: 1 1 calc(50% - 0.25rem);
+				min-width: 6.5rem;
+				text-align: center;
+				font-size: 0.82rem;
+				font-weight: 600;
+				color: #fff;
+				background: rgba(255, 255, 255, 0.08);
+				border: 1px solid rgba(255, 255, 255, 0.16);
+			}
+			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-segment-row .tidb-contribute-chip.active {
+				background: rgba(255, 255, 255, 0.22);
+				border-color: rgba(255, 255, 255, 0.42);
+				box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+			}
 			#${CONTRIBUTE_PANEL_ID} .tidb-contribute-time-block {
 				display: grid;
 				gap: 0.55rem;
@@ -2319,6 +2340,12 @@
 			if (!fields) return;
 			if (this.contributeFormDraft) {
 				fields.segmentSelect.value = this.contributeFormDraft.segment;
+				fields.panel.querySelectorAll("[data-tidb-segment-value]").forEach((chip) => {
+					chip.classList.toggle(
+						"active",
+						chip.getAttribute("data-tidb-segment-value") === this.contributeFormDraft.segment
+					);
+				});
 				fields.startInput.value = this.contributeFormDraft.startValue;
 				fields.endInput.value = this.contributeFormDraft.endValue;
 				this.contributeSelectedSegment = this.contributeFormDraft.segment;
@@ -2391,13 +2418,14 @@
 						<div class="tidb-contribute-title">Submit timestamp</div>
 						<button type="button" class="tidb-contribute-close" data-tidb-close aria-label="Close">×</button>
 					</div>
-					<label for="tidb-contribute-segment">Segment</label>
-					<select id="tidb-contribute-segment" data-tidb-segment>
-						<option value="intro">Intro</option>
-						<option value="recap">Recap</option>
-						<option value="credits">Credits</option>
-						<option value="preview">Preview</option>
-					</select>
+					<label>Segment</label>
+					<div class="tidb-contribute-segment-row" data-tidb-segment-row role="tablist" aria-label="Segment">
+						<button type="button" class="tidb-contribute-chip active" data-tidb-segment-value="intro">Intro</button>
+						<button type="button" class="tidb-contribute-chip" data-tidb-segment-value="recap">Recap</button>
+						<button type="button" class="tidb-contribute-chip" data-tidb-segment-value="credits">Credits</button>
+						<button type="button" class="tidb-contribute-chip" data-tidb-segment-value="preview">Preview</button>
+					</div>
+					<input type="hidden" id="tidb-contribute-segment" data-tidb-segment value="intro" />
 					<div class="tidb-contribute-time-block">
 						<div>
 							<label for="tidb-contribute-start">Start time</label>
@@ -2425,9 +2453,18 @@
 				document.body.appendChild(panel);
 
 				panel.querySelector("[data-tidb-close]").addEventListener("click", () => this.closeContributePanel());
-				panel.querySelector("[data-tidb-segment]").addEventListener("change", (event) => {
-					this.contributeSelectedSegment = event.target.value;
-					this.applyContributeDefaults(this.contributeSelectedSegment, { resetMarkedStart: true });
+				panel.querySelectorAll("[data-tidb-segment-value]").forEach((button) => {
+					button.addEventListener("click", () => {
+						const value = button.getAttribute("data-tidb-segment-value");
+						if (!value) return;
+						this.contributeSelectedSegment = value;
+						const hidden = panel.querySelector("[data-tidb-segment]");
+						if (hidden) hidden.value = value;
+						panel.querySelectorAll("[data-tidb-segment-value]").forEach((chip) => {
+							chip.classList.toggle("active", chip === button);
+						});
+						this.applyContributeDefaults(this.contributeSelectedSegment, { resetMarkedStart: true });
+					});
 				});
 				panel.querySelector("[data-tidb-start-current]").addEventListener("click", () => {
 					const fields = this.getContributePanelFields();

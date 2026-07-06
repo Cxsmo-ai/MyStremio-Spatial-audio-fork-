@@ -276,6 +276,7 @@ impl PartialUi for WebView {
                                 include_str!("../../../assets/custom_player_glass.js"),
                                 include_str!("../../../assets/custom_player_loading.js"),
                                 include_str!("../../../assets/custom_liquid_glass_nav.js"),
+                                include_str!("../../../assets/custom_hero_loading.js"),
                                 include_str!("../../../assets/custom_deep_link.js"),
                                 include_str!("../../../assets/custom_continue_watching_play.js"),
                                 include_str!("../../../assets/custom_audio_sync.js"),
@@ -293,13 +294,14 @@ impl PartialUi for WebView {
                                 include_str!("../../../assets/custom_playback_api.js"),
                                 include_str!("../../../assets/custom_seek_buffer.js"),
                                 include_str!("../../../assets/custom_volume_persist.js"),
+                                include_str!("../../../assets/custom_track_label_fix.js"),
                             ] {
                                 wv.execute_script(script, |_| Ok(()))
                                     .expect("Cannot add MyStremio module");
                             }
 
                             wv.execute_script(
-                                r#"try{if(document.readyState!=='loading'&&window.runBootstrapOnce)window.runBootstrapOnce();if(window.__stremioCustomPlayerGlassEnsure)window.__stremioCustomPlayerGlassEnsure();if(window.__stremioCustomPlayerLoadingEnsure)window.__stremioCustomPlayerLoadingEnsure();if(window.__stremioCustomPlayerTransparencyEnsure)window.__stremioCustomPlayerTransparencyEnsure();if(window.__stremioCustomPlaybackEnsure)window.__stremioCustomPlaybackEnsure();if(window.__stremioCustomVolumePersistEnsure)window.__stremioCustomVolumePersistEnsure();if(window.__stremioCustomAudioSyncEnsure)window.__stremioCustomAudioSyncEnsure();if(window.__stremioCustomSubtitleSyncEnsure)window.__stremioCustomSubtitleSyncEnsure();if(window.__stremioCustomLibraryFoldersEnsure)window.__stremioCustomLibraryFoldersEnsure();if(window.__stremioCustomCinebyeAddonsEnsure)window.__stremioCustomCinebyeAddonsEnsure();if(window.__stremioCustomApiKeySettingsEnsure)window.__stremioCustomApiKeySettingsEnsure();if(window.__stremioCustomScrollbarEnsure)window.__stremioCustomScrollbarEnsure();}catch(e){console.error('[StremioCustom] post-inject failed',e);}"#,
+                                r#"try{if(document.readyState!=='loading'&&window.runBootstrapOnce)window.runBootstrapOnce();if(window.__stremioCustomPlayerGlassEnsure)window.__stremioCustomPlayerGlassEnsure();if(window.__stremioCustomPlayerLoadingEnsure)window.__stremioCustomPlayerLoadingEnsure();if(window.__stremioCustomHeroLoadingEnsure)window.__stremioCustomHeroLoadingEnsure();if(window.__stremioCustomPlayerTransparencyEnsure)window.__stremioCustomPlayerTransparencyEnsure();if(window.__stremioCustomPlaybackEnsure)window.__stremioCustomPlaybackEnsure();if(window.__stremioCustomVolumePersistEnsure)window.__stremioCustomVolumePersistEnsure();if(window.__stremioCustomAudioSyncEnsure)window.__stremioCustomAudioSyncEnsure();if(window.__stremioCustomSubtitleSyncEnsure)window.__stremioCustomSubtitleSyncEnsure();if(window.__stremioCustomLibraryFoldersEnsure)window.__stremioCustomLibraryFoldersEnsure();if(window.__stremioCustomCinebyeAddonsEnsure)window.__stremioCustomCinebyeAddonsEnsure();if(window.__stremioCustomApiKeySettingsEnsure)window.__stremioCustomApiKeySettingsEnsure();if(window.__stremioCustomScrollbarEnsure)window.__stremioCustomScrollbarEnsure();}catch(e){console.error('[StremioCustom] post-inject failed',e);}"#,
                                 |_| Ok(()),
                             )
                             .ok();

@@ -150,7 +150,10 @@ function Ensure-StreamUiSchema {
     param([string]$PluginsDir)
 
     if (-not (Test-Path $PluginsDir)) { return }
-    $schemaSource = Join-Path (Join-Path $PSScriptRoot "..\assets") "stream-ui.plugin.schema.json"
+    $schemaSource = Join-Path (Join-Path $PSScriptRoot "..\..\..\assets-bundle\plugins\player") "stream-ui.plugin.schema.json"
+    if (-not (Test-Path $schemaSource)) {
+        $schemaSource = Join-Path (Join-Path $PSScriptRoot "..\assets") "stream-ui.plugin.schema.json"
+    }
     if (-not (Test-Path $schemaSource)) { return }
     $schemaTarget = Join-Path $PluginsDir "player\stream-ui.plugin.schema.json"
 

@@ -41,6 +41,10 @@ MOJIBAKE_MARKERS = (
     "û",
     "ý",
     "ÿ",
+    "Ø",
+    "§",
+    "¡",
+    "¢",
 )
 
 
@@ -82,7 +86,22 @@ def repair_main_js(path: Path) -> int:
         changes.append((value, fixed))
         return f"{prefix}{fixed}{suffix}"
 
+    def repl_iso_name(match: re.Match[str]) -> str:
+        prefix, value, suffix = match.group(1), match.group(2), match.group(3)
+        if not looks_mojibake(value):
+            return match.group(0)
+        fixed = fix_mojibake(value)
+        if fixed == value:
+            return match.group(0)
+        changes.append((value, fixed))
+        return f"{prefix}{fixed}{suffix}"
+
     fixed_text = re.sub(r'(local:")([^"\\]*(?:\\.[^"\\]*)*)(")', repl, text)
+    fixed_text = re.sub(
+        r'("(?:[a-z]{2,3})":")([^"\\]*(?:\\.[^"\\]*)*)(")',
+        repl_iso_name,
+        fixed_text,
+    )
     if changes:
         path.write_bytes(fixed_text.encode("utf-8"))
     return len(changes)

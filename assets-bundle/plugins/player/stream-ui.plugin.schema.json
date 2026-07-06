@@ -2,8 +2,15 @@
   {
     "key": "enable_torrent_accordions",
     "type": "toggle",
-    "label": "Enable torrent accordions",
-    "description": "Group torrent stream providers into collapsible sections.",
+    "label": "Group torrent/debrid streams",
+    "description": "Group torrent and debrid stream providers into collapsible sections.",
+    "defaultValue": true
+  },
+  {
+    "key": "enable_usenet_accordions",
+    "type": "toggle",
+    "label": "Group Usenet streams",
+    "description": "Group Usenet and NZB stream providers into collapsible sections.",
     "defaultValue": true
   },
   {

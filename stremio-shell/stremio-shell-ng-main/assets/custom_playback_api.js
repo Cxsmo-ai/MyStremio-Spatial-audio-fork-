@@ -36,6 +36,11 @@
   let pollTimer = null;
   let hookInstalled = false;
   let autoPlaySuppressCount = 0;
+  let startupBaselineTime = null;
+  let playbackAdvanced = false;
+  let startupRecoveryCount = 0;
+  const STARTUP_RECOVERY_MAX = 5;
+  const STARTUP_RECOVERY_WINDOW_MS = 45000;
   const shimmedVideos = new WeakSet();
 
   function isAutoPlaySuppressed() {
@@ -143,6 +148,9 @@
   function resolveDuration() {
     const domDuration = readDurationFromDom();
     const shimDuration = shimState.duration;
+    const hintDuration = Number(window.__stremioPlaybackDurationHint);
+    const progressHint = Number(window.__stremioPlaybackProgressHint);
+    const current = resolveCurrentTime();
     if (Number.isFinite(shimDuration) && shimDuration > 0) {
       if (domDuration != null && domDuration > shimDuration + 1) {
         return domDuration;
@@ -150,18 +158,66 @@
       return shimDuration;
     }
     if (domDuration != null && domDuration > 0) return domDuration;
+    if (Number.isFinite(hintDuration) && hintDuration > 0) return hintDuration;
+    if (
+      Number.isFinite(progressHint) &&
+      progressHint > 0.01 &&
+      progressHint < 0.995 &&
+      Number.isFinite(current) &&
+      current > 0
+    ) {
+      const estimated = current / progressHint;
+      if (Number.isFinite(estimated) && estimated > current + 5) return estimated;
+    }
     return shimDuration;
   }
 
   function readDurationFromDom() {
     const labels = Array.from(document.querySelectorAll('[class*="seek-bar-container"] [class*="label"]'));
-    const times = labels
-      .map((label) => parseTimeLabel(label.textContent || ''))
-      .filter((value) => value != null);
-    if (times.length >= 2) {
-      return Math.max(...times);
+    const times = [];
+    for (const label of labels) {
+      const text = (label.textContent || '').trim();
+      if (!text) continue;
+      for (const part of text.split(/[/|]/)) {
+        const parsed = parseTimeLabel(part.trim());
+        if (parsed != null) times.push(parsed);
+      }
+    }
+    if (times.length >= 2) return Math.max(...times);
+    return null;
+  }
+
+  function extractDurationFromCorePlayer(player) {
+    if (!player || typeof player !== 'object') return null;
+    const meta = player.meta || player.item?.meta || {};
+    const item = player.item || {};
+    const candidates = [
+      player.duration,
+      item.duration,
+      item.runtime,
+      meta.duration,
+      meta.runtime,
+      player.seriesInfo?.episode?.runtime,
+      player.seriesInfo?.episode?.duration,
+    ];
+    for (const candidate of candidates) {
+      const seconds = Number(candidate);
+      if (Number.isFinite(seconds) && seconds > 0) return seconds;
     }
     return null;
+  }
+
+  async function pollCorePlayerDuration() {
+    if (!isPlayerRoute()) return;
+    try {
+      const getState =
+        window.services?.core?.transport?.getState ||
+        window.core?.getState;
+      if (!getState) return;
+      const player = await getState('player');
+      const seconds = extractDurationFromCorePlayer(player);
+      if (seconds != null) updateDuration(seconds);
+    } catch (_) {}
   }
 
   function getManagedVideos() {
@@ -231,11 +287,31 @@
     return {
       hasStream: Boolean(currentStreamPath),
       position: shimState.currentTime,
+      duration: resolveDuration(),
       timeFresh: lastMpvTimeAt > 0 && Date.now() - lastMpvTimeAt < 4000,
       buffering: mpvPausedForCache,
       cacheAhead: mpvCacheAheadSec,
       cacheObserved: mpvCacheAheadReported,
+      playbackAdvanced,
+      startupAge: streamStartedAt > 0 ? Date.now() - streamStartedAt : 0,
     };
+  }
+
+  function resetStartupPlaybackTracking() {
+    startupBaselineTime = null;
+    playbackAdvanced = false;
+    startupRecoveryCount = 0;
+  }
+
+  function noteMpvTimeProgress(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return;
+    if (startupBaselineTime == null) {
+      startupBaselineTime = seconds;
+      return;
+    }
+    if (seconds > startupBaselineTime + 0.12) {
+      playbackAdvanced = true;
+    }
   }
 
   function syncShellVideoState() {
@@ -312,6 +388,13 @@
     }
     if (changed && getPreloadMode() === 'full') maybeBoostPreload();
     syncShellVideoState();
+    if (changed) {
+      document.dispatchEvent(
+        new CustomEvent('stremio-custom-duration', {
+          detail: { duration: nextDuration },
+        })
+      );
+    }
   }
 
   function updateCurrentTime(nextTime, source) {
@@ -348,6 +431,11 @@
     const change = Array.isArray(payload) ? payload[1] : payload;
     if (!change?.name) return;
 
+    if (change.name === 'track-list' && Array.isArray(change.data)) {
+      change.data =
+        window.__stremioSanitizeTrackList?.(change.data) ?? change.data;
+    }
+
     if (change.name === 'time-pos') {
       if (shimState.seeking) return;
       const seconds = Number(change.data);
@@ -356,6 +444,7 @@
         // updateCurrentTime would otherwise leave lastMpvTimeAt at 0 and trigger
         // false-positive recovery seeks that flip the play/pause UI).
         lastMpvTimeAt = Date.now();
+        noteMpvTimeProgress(seconds);
         updateCurrentTime(seconds, 'mpv');
         maybeBoostPreload();
         syncShellVideoState();
@@ -421,6 +510,27 @@
     return Boolean(pauseBtn);
   }
 
+  function applyStoredDurationHint() {
+    const hintDuration = Number(window.__stremioPlaybackDurationHint);
+    if (Number.isFinite(hintDuration) && hintDuration > 0) {
+      updateDuration(hintDuration);
+      return;
+    }
+    try {
+      const raw = sessionStorage.getItem('stremio-cw-playback-hint');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || Date.now() - Number(parsed.at) > 120000) return;
+      if (Number.isFinite(parsed.duration) && parsed.duration > 0) {
+        window.__stremioPlaybackDurationHint = parsed.duration;
+        updateDuration(parsed.duration);
+      }
+      if (Number.isFinite(parsed.progress) && parsed.progress > 0) {
+        window.__stremioPlaybackProgressHint = parsed.progress;
+      }
+    } catch (_) {}
+  }
+
   function onStreamPathChanged(streamPath) {
     if (!streamPath || streamPath === currentStreamPath) return;
     currentStreamPath = streamPath;
@@ -430,15 +540,26 @@
     lastMpvTimeAt = 0;
     mpvCacheAheadSec = 0;
     mpvCacheAheadReported = false;
+    resetStartupPlaybackTracking();
     shimState.currentTime = 0;
     shimState.duration = NaN;
     shimState.seeking = false;
     shimState.metadataLoaded = false;
+    applyStoredDurationHint();
     document.dispatchEvent(
       new CustomEvent('stremio-custom-stream-started', {
         detail: { path: streamPath },
       })
     );
+  }
+
+  function nudgePlaybackAtCurrentTime() {
+    if (isAutoPlaySuppressed()) return false;
+    let resumeAt = shimState.currentTime || readTimeFromDom() || 0;
+    if (resumeAt < 0.05) resumeAt = 0.01;
+    playShellPlayback();
+    sendMpvSetProp('time-pos', resumeAt);
+    return true;
   }
 
   function scheduleSessionNudge() {
@@ -455,13 +576,45 @@
   }
 
   function refreshMpvViewport() {
-    if (!isPlayerRoute() || !window.chrome?.webview?.postMessage) return;
-    sendMpvSetProp('vo', 'gpu-next');
+    if (!isPlayerRoute()) return;
+    window.__stremioCustomPlayerTransparencyEnsure?.();
     if (isAutoPlaySuppressed()) return;
     // Only recover unintended startup pauses while the UI still shows playback as active.
     if (mpvPause && uiShowsPlaying() && Date.now() - streamStartedAt < 20000) {
       playShellPlayback();
     }
+  }
+
+  function runStartupPlaybackRecovery() {
+    if (!isPlayerRoute() || !currentStreamPath) return;
+    if (isAutoPlaySuppressed()) return;
+    if (mpvPausedForCache) return;
+    if (playbackAdvanced) return;
+    if (Date.now() < recoveryMutedUntil) return;
+    if (startupRecoveryCount >= STARTUP_RECOVERY_MAX) return;
+
+    const age = Date.now() - streamStartedAt;
+    if (age < 1500 || age > STARTUP_RECOVERY_WINDOW_MS) return;
+
+    const userPaused = mpvPause && !uiShowsPlaying();
+    if (userPaused) return;
+    if (lastMpvTimeAt <= 0 || lastMpvTimeAt < streamStartedAt) return;
+
+    const current = shimState.currentTime;
+    const baseline = startupBaselineTime;
+    const staleMs = Date.now() - lastMpvTimeAt;
+    const stuckOnFrame =
+      baseline != null &&
+      Number.isFinite(current) &&
+      Math.abs(current - baseline) < 0.2 &&
+      age >= 2000;
+    const timePosStale = staleMs >= 2500 && age >= 2500;
+
+    if (!stuckOnFrame && !timePosStale) return;
+
+    startupRecoveryCount += 1;
+    recoveryMutedUntil = Date.now() + 1200;
+    nudgePlaybackAtCurrentTime();
   }
 
   function onPlayerSessionStart() {
@@ -470,6 +623,8 @@
     requestMpvObservations();
     startPolling();
     scheduleSessionNudge();
+    applyStoredDurationHint();
+    void pollCorePlayerDuration();
     window.__stremioCustomPlayerTransparencyEnsure?.();
   }
 
@@ -723,6 +878,10 @@
       updateDuration(domDuration);
     }
 
+    if (!Number.isFinite(shimState.duration) || shimState.duration <= 0) {
+      void pollCorePlayerDuration();
+    }
+
     if (mpvCacheAheadSec <= 0 && shimState.currentTime > 0) {
       sendMpvObserve('demuxer-cache-time');
     }
@@ -730,6 +889,7 @@
     maybeBoostPreload();
     dispatchVideoEvent('progress');
     syncShellVideoState();
+    runPlaybackRecovery();
   }
 
   function startPolling() {
@@ -760,6 +920,7 @@
     recoveryMutedUntil = 0;
     streamStartedAt = 0;
     shimVideo = null;
+    resetStartupPlaybackTracking();
   }
 
   function ensurePlaybackApi() {
@@ -823,6 +984,18 @@
   window.addEventListener('hashchange', ensurePlaybackApi);
   document.addEventListener('stremio-custom-playback-route', ensurePlaybackApi);
   document.addEventListener('stremio-custom-bootstrap-ready', ensurePlaybackApi);
+  document.addEventListener('stremio-custom-stream-started', () => {
+    applyStoredDurationHint();
+    void pollCorePlayerDuration();
+  });
+  document.addEventListener('stremio-custom-duration-hint', (event) => {
+    const duration = Number(event?.detail?.duration);
+    if (Number.isFinite(duration) && duration > 0) updateDuration(duration);
+    const progress = Number(event?.detail?.progress);
+    if (Number.isFinite(progress) && progress > 0) {
+      window.__stremioPlaybackProgressHint = progress;
+    }
+  });
 
   if (document.readyState !== 'loading') {
     ensurePlaybackApi();

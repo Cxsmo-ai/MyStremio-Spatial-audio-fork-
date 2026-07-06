@@ -24,7 +24,8 @@
 
   const READY_TIME_SEC = 0.35;
   const MAX_LOAD_MS = 20000;
-  const VIEWPORT_PUNCH_MS = [0, 80, 200, 450, 900];
+  const VIEWPORT_PUNCH_MS = [0, 120, 350];
+  const VIEWPORT_MAINTAIN_MS = 5000;
 
   let phase = Phase.IDLE;
   let sessionId = 0;
@@ -33,6 +34,7 @@
   let maxTimer = null;
   let viewportTimers = [];
   let pollTimer = null;
+  let lastViewportMaintainAt = 0;
   let brandObserver = null;
 
   let artwork = { background: null, logo: null, imdbId: null };
@@ -285,6 +287,13 @@
     }
   }
 
+  function maintainMpvViewport() {
+    const now = Date.now();
+    if (now - lastViewportMaintainAt < VIEWPORT_MAINTAIN_MS) return;
+    lastViewportMaintainAt = now;
+    punchMpvViewport();
+  }
+
   function scheduleViewportPunch() {
     clearViewportTimers();
     for (const delay of VIEWPORT_PUNCH_MS) {
@@ -318,14 +327,13 @@
     if (!snap?.hasStream) return false;
     if (snap.buffering) return false;
     if (!snap.timeFresh) return false;
-    if (!Number.isFinite(snap.duration) || snap.duration <= 0) return false;
     if (snap.position < READY_TIME_SEC) return false;
     return true;
   }
 
   function checkReady() {
     if (phase !== Phase.LOADING) return;
-    if (shellVideoLoaded() || mpvReadyForVideo()) {
+    if (mpvReadyForVideo()) {
       setPhase(Phase.VIDEO);
       window.StremioCustomPlayback?.nudgePlayback?.();
       scheduleViewportPunch();
@@ -338,7 +346,7 @@
     if (pollTimer) return;
     pollTimer = window.setInterval(() => {
       if (phase === Phase.LOADING) checkReady();
-      else if (phase === Phase.VIDEO) punchMpvViewport();
+      else if (phase === Phase.VIDEO) maintainMpvViewport();
     }, 250);
   }
 

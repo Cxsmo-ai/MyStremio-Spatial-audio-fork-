@@ -29,6 +29,30 @@ function Repair-WebUiLanguageEmbeds {
         throw "Language embed repair failed with exit code $LASTEXITCODE"
     }
 
+    $mojibakeScript = Join-Path $ScriptRoot "fix-webui-language-mojibake.py"
+    if (Test-Path $mojibakeScript) {
+        python $mojibakeScript $mainJs.FullName
+        if ($LASTEXITCODE -ne 0) {
+            throw "Language mojibake repair failed with exit code $LASTEXITCODE"
+        }
+    }
+
+    $shortcutScript = Join-Path $ScriptRoot "fix-webui-shortcut-symbols.py"
+    if (Test-Path $shortcutScript) {
+        python $shortcutScript $mainJs.FullName
+        if ($LASTEXITCODE -ne 0) {
+            throw "Shortcut symbol repair failed with exit code $LASTEXITCODE"
+        }
+    }
+
+    $heroPatchScript = Join-Path $ScriptRoot "fix-webui-hero-fallback.py"
+    if (Test-Path $heroPatchScript) {
+        python $heroPatchScript $mainJs.FullName
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Hero fallback patch reported exit code $LASTEXITCODE (continuing build)"
+        }
+    }
+
     $swPatchScript = Join-Path $ScriptRoot "patch-webui-sw-revision.py"
     if (Test-Path $swPatchScript) {
         python $swPatchScript $WebUiDirectory $mainJs.FullName
