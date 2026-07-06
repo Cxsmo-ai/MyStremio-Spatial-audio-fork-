@@ -30,7 +30,7 @@ Current release: **2.2.1**
 
 -MyStremio uses MPV as the native video player
 
--Improved player tooling (hover timestamp, TheIntroDB/auto-skip options, controllable preload behavior)
+-Improved player tooling (hover timestamp, TheIntroDB/auto-skip options, controllable preload behavior, brightness control)
 
 -Better stream organization and metadata presentation (enrichment panels and cleaner stream UI behavior)
 
@@ -38,7 +38,7 @@ Current release: **2.2.1**
 
 -Custom library groups with JSON import/export
 
--Additional power-user options such as plugin/theme toggles and Discord Rich Presence
+-Additional power-user options such as plugin toggles and Discord Rich Presence
 
 -Packaged as a ready-to-use single installer
 
