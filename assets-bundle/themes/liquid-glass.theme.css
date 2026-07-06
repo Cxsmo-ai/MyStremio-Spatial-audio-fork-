@@ -86,15 +86,14 @@ html {
     max-height: calc(100vh - 6rem) !important;
     overflow-y: auto !important;
     border-radius: var(--border-radius) !important;
-    background: rgba(70, 70, 70, 0.22) !important;
+    background: rgba(30, 30, 30, 0.92) !important;
     box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.2),
-        0 4px 16px rgba(0, 0, 0, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
+        0 8px 32px rgba(0, 0, 0, 0.5),
+        0 4px 16px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
     backdrop-filter: var(--backdrop-filter) !important;
     -webkit-backdrop-filter: var(--backdrop-filter) !important;
-    border: 1px solid rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 /* Context menu content - handle all class variations */
@@ -512,17 +511,17 @@ html {
     box-shadow: none !important;
 }
 
+#app nav[class*="horizontal-nav-bar"] [class*="nav-menu-container"],
 .nav-menu-container-Pl25j,
 [class*="nav-menu-container"] {
-    background: rgba(70, 70, 70, 0.22) !important;
+    background: rgba(30, 30, 30, 0.92) !important;
     box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.2),
-        0 4px 16px rgba(0, 0, 0, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
+        0 8px 32px rgba(0, 0, 0, 0.5),
+        0 4px 16px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
     backdrop-filter: var(--backdrop-filter) !important;
     -webkit-backdrop-filter: var(--backdrop-filter) !important;
-    border: 1px solid rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 [class*="player-container"] [class*="nav-menu-container"],

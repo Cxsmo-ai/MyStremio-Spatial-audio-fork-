@@ -1,6 +1,5 @@
 use native_windows_derive::NwgUi;
 use native_windows_gui as nwg;
-use rand::Rng;
 use serde_json;
 use std::{
     cell::RefCell,
@@ -12,11 +11,10 @@ use std::{
     sync::{Arc, Mutex},
     thread, time,
 };
-use url::Url;
 use winapi::um::{winbase::CREATE_BREAKAWAY_FROM_JOB, winuser::WS_EX_TOPMOST};
 
 use crate::stremio_app::{
-    constants::{APP_NAME, ENABLE_AUTOUPDATER, UPDATE_ENDPOINT, UPDATE_INTERVAL, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH},
+    constants::{APP_NAME, ENABLE_AUTOUPDATER, UPDATE_INTERVAL, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH},
     custom_api,
     ipc::{RPCRequest, RPCResponse},
     splash::SplashImage,
@@ -39,7 +37,6 @@ pub struct MainWindow {
     pub no_splash: bool,
     pub dev_tools: bool,
     pub start_hidden: bool,
-    pub autoupdater_endpoint: Option<Url>,
     pub force_update: bool,
     pub release_candidate: bool,
     pub autoupdater_setup_file: Arc<Mutex<Option<PathBuf>>>,
@@ -184,7 +181,6 @@ impl MainWindow {
                 .expect("Cannot initialie the single application IPC"),
         );
 
-        let autoupdater_endpoint = self.autoupdater_endpoint.clone();
         let force_update = self.force_update;
         let release_candidate = self.release_candidate;
         let autoupdater_setup_file = self.autoupdater_setup_file.clone();
@@ -204,22 +200,9 @@ impl MainWindow {
                         .parse()
                         .expect("Should always be valid");
 
-                    let updater_endpoint = if let Some(ref endpoint) = autoupdater_endpoint {
-                        endpoint.clone()
-                    } else {
-                        let mut rng = rand::thread_rng();
-                        let index = rng.gen_range(0..UPDATE_ENDPOINT.len());
-                        let mut url = Url::parse(UPDATE_ENDPOINT[index]).unwrap();
-                        url.query_pairs_mut().append_pair("arch", env!("ARCH"));
-                        if release_candidate {
-                            url.query_pairs_mut().append_pair("rc", "true");
-                        }
-                        url
-                    };
-
                     let updater =
-                        updater::Updater::new(current_version, &updater_endpoint, force_update);
-                    match updater.autoupdate() {
+                        updater::Updater::new(current_version, force_update, release_candidate);
+                    match updater.check_for_update() {
                         Ok(Some(update)) => {
                             println!("New version ready to install v{}", update.version);
                             let mut autoupdater_setup_file = autoupdater_setup_file.lock().unwrap();

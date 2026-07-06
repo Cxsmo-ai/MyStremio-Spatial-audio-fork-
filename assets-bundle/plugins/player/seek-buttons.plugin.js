@@ -22,7 +22,7 @@
 
 
 
-	const PLUGIN_VERSION = "1.6.0";
+	const PLUGIN_VERSION = "1.6.1";
 
 	const PLUGIN_ID = "seek-buttons";
 
@@ -486,7 +486,17 @@
 
 		if (!volumeRoot || !volumeRoot.parentNode) return null;
 
-		return { parent: volumeRoot.parentNode, after: volumeRoot };
+		const parent = volumeRoot.parentNode;
+		const brightnessBtn = document.getElementById("mystremio-brightness-btn");
+		if (
+			brightnessBtn &&
+			brightnessBtn.parentNode === parent &&
+			brightnessBtn.previousElementSibling === volumeRoot
+		) {
+			return { parent, after: brightnessBtn };
+		}
+
+		return { parent, after: volumeRoot };
 
 	}
 

@@ -2,7 +2,7 @@
 
 **MyStremio** is a personalized Windows desktop client built on the Stremio shell stack.
 It combines UI upgrades, player improvements, plugins/themes and library tools in one installer.
-Current release: **2.2.0**
+Current release: **2.2.1**
 
 > **Disclaimer:** MyStremio is an independent community project and is not affiliated with official Stremio.
 ---
@@ -148,6 +148,13 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 
 ## 🛠️ Patch Notes
 
+### 2.2.1
+
+- **In-app updater** — Checks GitHub Releases for `MyStremioSetup-v*_x64.exe`, verifies `SHA256SUMS.txt`, and installs updates via the existing Stremio update banner.
+- **Player brightness** — Brightness control in the left player bar with MPV tone adjustment, draggable slider, and compact popup UI.
+- **Hold-left-click speed boost disabled** — Left-click hold no longer forces 2× playback speed while the speed menu stays available.
+- **Player polish** — Seek-buffer hover timing, hold-speed hook stability, and brightness popup layout fixes.
+
 ### 2.2.0
 
 - **Board hero banner (native React)** — Featured titles are rendered directly in the board route. This required shipping a **bundled local Web UI** instead of the public Stremio website, and moving **Settings → MyStremio** into native React (autoskip, favorite languages, plugin toggles, Discord, API keys) for a stable settings experience without DOM injection.
@@ -176,7 +183,7 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 ## 💾 Installation
 
 1. Download the latest installer from this repository's **Releases** page.
-2. Run `MyStremioSetup-v2.2.0_x64.exe` (or the latest version).
+2. Run `MyStremioSetup-v2.2.1_x64.exe` (or the latest version).
 3. The installer sets up:
    - App binaries (`mystremio-shell.exe`, streaming server, FFmpeg, libmpv)
    - Bundled plugins and themes
@@ -235,7 +242,7 @@ cd stremio-shell\stremio-shell-ng-main
 .\package-release.ps1
 ```
 
-Output: `release\MyStremioSetup-v2.2.0_x64.exe`
+Output: `release\MyStremioSetup-v2.2.1_x64.exe`
 
 The repo includes a prebuilt `stremio-shell/stremio-shell-ng-main/webui/` bundle. To rebuild the Web UI from source, clone [stremio-web](https://github.com/Stremio/stremio-web) into `.tmp/stremio-web`, apply MyStremio patches, then run the build script again.
 

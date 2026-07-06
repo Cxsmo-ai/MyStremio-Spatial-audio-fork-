@@ -177,6 +177,8 @@ pub enum FpProp {
     TimePos,
     Mute,
     Volume,
+    Brightness,
+    Gamma,
     Duration,
     SubDelay,
     SubScale,

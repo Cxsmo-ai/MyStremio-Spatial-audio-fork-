@@ -1,7 +1,15 @@
 .tmp/
 backups/
 
+stremio-shell/stremio-shell-ng-main/target/
+stremio-shell/stremio-shell-ng-main/libmpv-2.dll
+stremio-shell/stremio-shell-ng-main/dist/
+
 release/*.exe
 release/*.zip
+
+/*.exe
+/*.dll
+server.js
 
 .env
