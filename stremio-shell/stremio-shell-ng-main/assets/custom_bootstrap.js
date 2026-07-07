@@ -538,10 +538,6 @@
     }
   }
 
-  function removeHorizontalNavPluginFromEnabled() {
-    // Phase 2: Horizontal navigation is always active in Glass mode.
-  }
-
   function getEnabledPlugins() {
     try {
       return JSON.parse(localStorage.getItem('enabledPlugins') || '[]');

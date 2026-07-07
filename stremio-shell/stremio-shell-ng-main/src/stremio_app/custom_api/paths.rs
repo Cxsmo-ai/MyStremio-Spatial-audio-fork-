@@ -117,6 +117,14 @@ fn write_runtime_state(shell_version: &str, webui_fingerprint: &str) {
 
 fn clear_webview_browsing_cache() {
     const CACHE_SUBDIRS: &[&str] = &[
+        "EBWebView/Default/Cache",
+        "EBWebView/Default/Code Cache",
+        "EBWebView/Default/Service Worker",
+        "EBWebView/Default/GPUCache",
+        "EBWebView/ShaderCache",
+        "EBWebView/GrShaderCache",
+        "EBWebView/BrowserMetrics",
+        // Legacy layout before WebView2 used the EBWebView subfolder.
         "Default/Cache",
         "Default/Code Cache",
         "Default/Service Worker",
