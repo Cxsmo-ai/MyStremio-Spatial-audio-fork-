@@ -1,4 +1,6 @@
-# MyStremio
+# MyStremio Spatial Audio Fork
+
+[Visit the Official Repository: Cxsmo-ai/MyStremio-Spatial-audio-fork-](https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-)
 
 **MyStremio** is a personalized Windows desktop client built on the Stremio shell stack.
 It combines UI upgrades, player improvements, plugins/themes and library tools in one installer.
@@ -196,15 +198,17 @@ Configurable skip-back and skip-forward controls in the player bar — useful fo
 
 ## 💾 Installation
 
-1. Download the latest installer from this repository's **Releases** page.
-2. Run `MyStremioSetup-v2.2.9_x64.exe` (or the latest version).
-3. The installer sets up:
+1. Download the latest `MyStremioSetup` installer from this repository's **Releases** page: [Cxsmo-ai/MyStremio-Spatial-audio-fork-/releases](https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-/releases)
+2. **Omniphony Studio (REQUIRED):** You MUST also download the Windows **Omniphony Studio Installer** from the official Omniphony releases page (make sure to grab the latest stable release, not a beta): [mgth/Omniphony/releases/latest](https://github.com/mgth/Omniphony/releases/latest)
+   - **Why it's needed:** MyStremio completely replaces the default audio player with a custom spatial audio engine (`orender`). Omniphony Studio is the companion GUI required to actually control this engine. Without it, you cannot switch between spatial 7.1.4 and binaural headphone modes, and you cannot adjust crucial settings like your room size, unit scale, and master normalization volume.
+3. Run `MyStremioSetup-v2.2.9_x64.exe` (or the latest version).
+4. The installer sets up:
    - App binaries (`mystremio-shell.exe`, streaming server, FFmpeg, libmpv)
    - Bundled plugins and themes
    - Prebuilt local Web UI
    - WebView2 runtime (if missing)
    - Protocol handlers (`stremio://`, `magnet:`, optional `.torrent`)
-4. Launch MyStremio from the Start menu or desktop shortcut.
+5. Launch MyStremio from the Start menu or desktop shortcut.
 
 
 ### 📂 Install paths
