@@ -15,6 +15,11 @@ def verify_main_js(main_js: Path) -> None:
     if not re.search(rb"/\^\(\\w\+\)\$/", data):
         raise RuntimeError(f"{main_js} does not look like a valid stremio-web bundle")
 
+    if not re.search(rb"if\(!r\)return", data):
+        raise RuntimeError(f"{main_js} is missing DynamicHero null guard patch")
+    if b"FALLBACK_TITLES[0]" in data:
+        raise RuntimeError(f"{main_js} still references FALLBACK_TITLES[0]")
+
     for match in re.finditer(rb"/[^/\n]{0,60}WEBVTT[^/\n]{0,60}/", data):
         snippet = match.group(0)
         if b"??????" in snippet:

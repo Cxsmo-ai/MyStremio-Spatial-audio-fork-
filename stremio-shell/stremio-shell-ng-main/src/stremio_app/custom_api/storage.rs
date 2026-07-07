@@ -559,6 +559,176 @@ pub fn read_language_names() -> Value {
     serde_json::from_str(LANGUAGE_NAMES).unwrap_or_else(|_| json!({}))
 }
 
+/// localStorage keys mirrored from `mystremio-settings.json`.
+///
+/// These MUST stay in sync with the constants in `assets/custom_bootstrap.js`. WebView2
+/// does not durably flush its localStorage write-ahead log when the app is closed while
+/// the shell keeps running in the tray, so any setting written only at runtime is lost on
+/// the next launch. Re-injecting every persisted value before `main.js` (put-if-absent)
+/// makes settings survive restarts and updates without depending on the async JS hydrate.
+fn collect_early_storage_pairs(prefs: &Value) -> Map<String, Value> {
+    let mut pairs: Map<String, Value> = Map::new();
+    let mut put = |key: &str, value: String| {
+        pairs.insert(key.to_string(), Value::String(value));
+    };
+
+    if let Some(plugins) = prefs.get("enabledPlugins").and_then(|v| v.as_array()) {
+        if let Ok(json) = serde_json::to_string(plugins) {
+            put("enabledPlugins", json);
+        }
+    }
+    if let Some(theme) = prefs
+        .get("currentTheme")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        put("currentTheme", theme.to_string());
+    }
+    if let Some(addon) = prefs
+        .get("metadataAddon")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        put("stremio-custom-metadata-addon", addon.to_string());
+    }
+    if let Some(preload) = prefs
+        .get("preload")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        put("stremio-custom-preload-secs", preload.to_string());
+    }
+
+    if let Some(volume) = prefs.get("volume") {
+        if let Some(level) = volume.get("level").and_then(|v| v.as_f64()) {
+            put(
+                "stremio-custom-player-volume",
+                (level.clamp(0.0, 100.0).round() as i64).to_string(),
+            );
+        }
+        if let Some(muted) = volume.get("muted").and_then(|v| v.as_bool()) {
+            put("stremio-custom-player-muted", muted.to_string());
+        }
+    }
+
+    if let Some(autoskip) = prefs.get("autoskip") {
+        for (id, key) in [
+            ("intro", "stremio-custom-autoskip-intro"),
+            ("credits", "stremio-custom-autoskip-credits"),
+            ("recap", "stremio-custom-autoskip-recap"),
+        ] {
+            if let Some(value) = autoskip.get(id).and_then(|v| v.as_bool()) {
+                put(key, value.to_string());
+            }
+        }
+    }
+
+    if let Some(discord) = prefs.get("discordPresence") {
+        for (id, key) in [
+            ("enabled", "stremio-custom-discord-rp-enabled"),
+            ("showPaused", "stremio-custom-discord-rp-show-paused"),
+            ("showMenu", "stremio-custom-discord-rp-show-menu"),
+        ] {
+            if let Some(value) = discord.get(id).and_then(|v| v.as_bool()) {
+                put(key, value.to_string());
+            }
+        }
+    }
+
+    if let Some(library) = prefs.get("library") {
+        if let Some(folders) = library
+            .get("foldersRaw")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && *s != "[]")
+        {
+            put("stremio-custom-library-folders", folders.to_string());
+        }
+        if let Some(active) = library
+            .get("activeFolderId")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            put("stremio-custom-library-active-folder", active.to_string());
+        }
+    }
+
+    if let Some(language) = prefs.get("language") {
+        if let Some(fav) = language.get("favAudio").and_then(|v| v.as_array()) {
+            if !fav.is_empty() {
+                if let Ok(json) = serde_json::to_string(fav) {
+                    put("stremio-custom-fav-audio", json);
+                }
+            }
+        }
+        if let Some(fav) = language.get("favSubs").and_then(|v| v.as_array()) {
+            if !fav.is_empty() {
+                if let Ok(json) = serde_json::to_string(fav) {
+                    put("stremio-custom-fav-subs", json);
+                }
+            }
+        }
+        if let Some(active) = language
+            .get("activeAudio")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            put("stremio-custom-active-audio", active.to_string());
+        }
+        if let Some(active) = language
+            .get("activeSubs")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            put("stremio-custom-active-subs", active.to_string());
+        }
+    }
+
+    if let Some(onboarding) = prefs.get("onboarding") {
+        if onboarding
+            .get("tmdbNoticeShown")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            put("stremio-custom-tmdb-notice-shown-v211d", "true".to_string());
+        }
+        if onboarding
+            .get("defaultsApplied")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            put("stremio-custom-defaults-applied-v211a", "true".to_string());
+        }
+    }
+
+    pairs
+}
+
+/// Injected before bundled main.js so login and all settings survive restarts and updates.
+pub fn build_early_storage_restore_script() -> String {
+    let prefs = read_user_preferences();
+    let auth_profile = prefs
+        .get("authProfile")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+
+    let auth_json = serde_json::to_string(auth_profile).unwrap_or_else(|_| "\"\"".to_string());
+    let restore_json =
+        serde_json::to_string(&collect_early_storage_pairs(&prefs)).unwrap_or_else(|_| "{}".to_string());
+
+    format!(
+        r#"(function(){{try{{
+if(window.__stremioEarlyStorageRestore)return;
+window.__stremioEarlyStorageRestore=true;
+function hasAuthProfile(){{try{{var raw=localStorage.getItem('profile');if(!raw)return false;var p=JSON.parse(raw);return Boolean(p&&p.auth&&p.auth.key);}}catch(_){{return false;}}}}
+var authProfile={auth_json};
+if(authProfile&&!hasAuthProfile()){{try{{localStorage.setItem('profile',authProfile);}}catch(_){{}}}}
+var restore={restore_json};
+Object.keys(restore).forEach(function(key){{try{{if(localStorage.getItem(key)===null)localStorage.setItem(key,restore[key]);}}catch(_){{}}}});
+}}catch(e){{console.warn('[StremioCustom] early storage restore failed',e);}}}})();"#
+    )
+}
+
 fn write_json_object(path: &Path, value: &Value) {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);

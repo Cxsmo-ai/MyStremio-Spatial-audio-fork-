@@ -2,6 +2,7 @@ use crate::stremio_app::constants::APP_DATA_DIR;
 use std::{
     env,
     fs,
+    io,
     path::{Path, PathBuf},
 };
 
@@ -28,10 +29,160 @@ pub fn webview_user_data_dir() -> PathBuf {
     app_data_dir().join("WebView2")
 }
 
+const RUNTIME_STATE_FILE: &str = "mystremio-runtime.json";
+/// Bump when a one-time WebView2 cache repair must run for existing installs.
+const CACHE_REPAIR_GENERATION: u32 = 4;
+
 pub fn ensure_webview_user_data_dir() {
+    clear_webview_cache_if_stale();
     let target = webview_user_data_dir();
     migrate_legacy_webview_user_data(&target);
     let _ = fs::create_dir_all(&target);
+}
+
+fn runtime_state_path() -> PathBuf {
+    app_data_dir().join(RUNTIME_STATE_FILE)
+}
+
+fn webui_bundle_fingerprint() -> String {
+    let service_worker = bundled_root().join("webui").join("service-worker.js");
+    let content = match fs::read_to_string(&service_worker) {
+        Ok(content) => content,
+        Err(_) => return "missing-webui".to_string(),
+    };
+
+    if let Some(marker) = content.find("main.js\",revision:\"") {
+        let rest = &content[marker + 19..];
+        if let Some(end) = rest.find('"') {
+            return format!("mainjs-{}", &rest[..end]);
+        }
+    }
+
+    service_worker
+        .metadata()
+        .map(|meta| format!("sw-{}", meta.len()))
+        .unwrap_or_else(|_| "unknown-webui".to_string())
+}
+
+fn read_runtime_state() -> (String, String, u32) {
+    let path = runtime_state_path();
+    if !path.exists() {
+        return (String::new(), String::new(), 0);
+    }
+
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(_) => return (String::new(), String::new(), 0),
+    };
+
+    let value: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(value) => value,
+        Err(_) => return (String::new(), String::new(), 0),
+    };
+
+    let shell_version = value
+        .get("shellVersion")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let webui_fingerprint = value
+        .get("webuiFingerprint")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let cache_repair_generation = value
+        .get("cacheRepairGeneration")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+
+    (shell_version, webui_fingerprint, cache_repair_generation)
+}
+
+fn write_runtime_state(shell_version: &str, webui_fingerprint: &str) {
+    let path = runtime_state_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let payload = serde_json::json!({
+        "shellVersion": shell_version,
+        "webuiFingerprint": webui_fingerprint,
+        "cacheRepairGeneration": CACHE_REPAIR_GENERATION,
+    });
+
+    if let Ok(content) = serde_json::to_string_pretty(&payload) {
+        let _ = fs::write(path, content);
+    }
+}
+
+fn clear_webview_browsing_cache() {
+    const CACHE_SUBDIRS: &[&str] = &[
+        "Default/Cache",
+        "Default/Code Cache",
+        "Default/Service Worker",
+        "Default/GPUCache",
+        "ShaderCache",
+        "GrShaderCache",
+        "BrowserMetrics",
+    ];
+
+    let base = webview_user_data_dir();
+    for subdir in CACHE_SUBDIRS {
+        let path = base.join(subdir);
+        if !path.exists() {
+            continue;
+        }
+        if let Err(error) = remove_dir_all(&path) {
+            eprintln!(
+                "Failed to clear WebView2 browsing cache at {}: {error}",
+                path.display()
+            );
+        }
+    }
+}
+
+/// Refresh only volatile WebView2 caches when the shell or bundled web UI changes.
+///
+/// We intentionally never delete the whole WebView2 profile: doing so also wipes
+/// `Local Storage`, which holds the Stremio login (`profile` key), logging the user
+/// out on every update. Clearing the browsing/service-worker caches is sufficient to
+/// drop stale bundles that previously caused black screens, while login and settings
+/// survive across updates.
+fn clear_webview_cache_if_stale() {
+    let current_version = env!("CARGO_PKG_VERSION");
+    let current_fingerprint = webui_bundle_fingerprint();
+    let (stored_version, stored_fingerprint, stored_cache_repair) = read_runtime_state();
+
+    let version_changed = stored_version != current_version;
+    let webui_changed = !stored_fingerprint.is_empty() && stored_fingerprint != current_fingerprint;
+    let repair_pending = stored_cache_repair < CACHE_REPAIR_GENERATION;
+
+    if version_changed || webui_changed || repair_pending {
+        clear_webview_browsing_cache();
+        println!(
+            "WebView2 browsing cache refresh (version_changed={version_changed}, webui_changed={webui_changed}, repair_pending={repair_pending})"
+        );
+    }
+
+    write_runtime_state(current_version, &current_fingerprint);
+}
+
+fn remove_dir_all(path: &Path) -> io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        if entry_path.is_dir() {
+            remove_dir_all(&entry_path)?;
+        } else {
+            let _ = fs::remove_file(&entry_path);
+        }
+    }
+
+    fs::remove_dir(path)
 }
 
 fn migrate_legacy_webview_user_data(target: &Path) {

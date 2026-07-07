@@ -149,6 +149,7 @@
         if (current?.auth?.key) return false;
       }
       localStorage.setItem('profile', authProfile);
+      document.dispatchEvent(new CustomEvent('stremio-custom-auth-restored'));
       return true;
     } catch (_) {
       return false;
@@ -800,8 +801,11 @@
           defaultsApplied: localStorage.getItem(DEFAULTS_APPLIED_KEY) === 'true',
         },
       }).catch(() => {});
-    } catch (_) {
-      await loadAutoskipSettings().catch(() => {});
+    } catch (error) {
+      console.error('[StremioCustom] hydrateUserPreferences failed:', error);
+      await loadAutoskipSettings().catch((autoskipError) => {
+        console.error('[StremioCustom] loadAutoskipSettings fallback failed:', autoskipError);
+      });
     }
   }
 
@@ -871,6 +875,13 @@
   `;
 
   function ensureOpaqueShellBackground() {
+    if (
+      typeof window.__stremioCustomIsColdStartPlayerBlocked === 'function' &&
+      window.__stremioCustomIsColdStartPlayerBlocked()
+    ) {
+      window.__stremioCustomStartupGuardEnsure?.();
+      return;
+    }
     if (isPlayerRoute()) {
       document.getElementById(OPAQUE_UI_STYLE_ID)?.remove();
       return;
@@ -887,6 +898,15 @@
 
   function ensurePlayerTransparencyFix() {
     const html = document.documentElement;
+    if (
+      typeof window.__stremioCustomIsColdStartPlayerBlocked === 'function' &&
+      window.__stremioCustomIsColdStartPlayerBlocked()
+    ) {
+      ensureOpaqueShellBackground();
+      document.getElementById(PLAYER_FIX_STYLE_ID)?.remove();
+      html.classList.remove(PLAYER_ROUTE_CLASS);
+      return;
+    }
     ensureOpaqueShellBackground();
     if (!isPlayerRoute()) {
       document.getElementById(PLAYER_FIX_STYLE_ID)?.remove();
@@ -1314,6 +1334,9 @@
       window.__stremioCustomSubtitleSyncEnsure();
     }
     maybeShowTmdbFirstRunNotice();
+    window.__stremioCustomDismissStartupOverlays?.();
+    window.__stremioCustomHideAppLoadingMask?.();
+    window.__stremioCustomScheduleShellAppReadyFallback?.();
     document.dispatchEvent(new CustomEvent('stremio-custom-bootstrap-ready'));
     setTimeout(() => {
       if (isOnSettingsPage()) {

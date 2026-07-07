@@ -45,6 +45,10 @@ pub fn webview_user_data_dir() -> std::path::PathBuf {
     paths::webview_user_data_dir()
 }
 
+pub fn build_early_storage_restore_script() -> String {
+    storage::build_early_storage_restore_script()
+}
+
 pub fn handle_request(message: &Value) -> Option<String> {
     let method = message.get("method")?.as_str()?;
     let id = message.get("id").cloned().unwrap_or(Value::Null);

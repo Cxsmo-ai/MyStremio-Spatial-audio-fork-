@@ -150,6 +150,12 @@ impl MainWindow {
         self.tray.tray_show_hide.set_checked(!self.start_hidden);
         if self.no_splash {
             self.splash_screen.hide();
+        } else {
+            let hide_splash_sender = self.hide_splash_notice.sender();
+            thread::spawn(move || {
+                thread::sleep(time::Duration::from_secs(4));
+                hide_splash_sender.notice();
+            });
         }
 
         let player_channel = self.player.channel.borrow();

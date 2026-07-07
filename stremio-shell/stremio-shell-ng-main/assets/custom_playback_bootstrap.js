@@ -41,6 +41,45 @@
     }
   }
 
+  function canReportAppReady() {
+    const app = document.getElementById('app');
+    return Boolean(app && app.childElementCount > 0);
+  }
+
+  function ensureShellAppReady() {
+    if (window.__stremioShellAppReadySent) return;
+    if (!canReportAppReady()) return;
+    try {
+      ensureShellHandshake();
+      const payload = JSON.stringify({ id: Date.now(), args: ['app-ready'] });
+      if (window.chrome?.webview?.postMessage) {
+        window.chrome.webview.postMessage(payload);
+      } else if (window.qt?.webChannelTransport?.send) {
+        window.qt.webChannelTransport.send(payload);
+      } else {
+        return;
+      }
+      window.__stremioShellAppReadySent = true;
+      console.info('[StremioCustom] app-ready fallback sent');
+    } catch (error) {
+      console.warn('[StremioCustom] app-ready fallback failed:', error);
+    }
+  }
+
+  function scheduleShellAppReadyFallback() {
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      ensureShellAppReady();
+      if (window.__stremioShellAppReadySent || attempts >= 30) {
+        window.clearInterval(timer);
+      }
+    }, 500);
+  }
+
+  window.__stremioCustomEnsureShellAppReady = ensureShellAppReady;
+  window.__stremioCustomScheduleShellAppReadyFallback = scheduleShellAppReadyFallback;
+
   function inferFullscreenFromUi() {
     const controls = document.querySelectorAll(
       [
@@ -246,10 +285,18 @@
 
   let attempts = 0;
   const bootstrapTimer = setInterval(() => {
+    if (window.__stremioShellAppReadySent) {
+      clearInterval(bootstrapTimer);
+      return;
+    }
     attempts += 1;
     ensureShellHandshake();
+    ensureShellAppReady();
     ensureFullscreenMessageHook();
     ensureFullscreenUiSync();
-    if (attempts >= 20) clearInterval(bootstrapTimer);
+    if (attempts >= 12) clearInterval(bootstrapTimer);
   }, 1000);
+  window.setTimeout(ensureShellAppReady, 2500);
+  window.setTimeout(ensureShellAppReady, 5000);
+  scheduleShellAppReadyFallback();
 })();

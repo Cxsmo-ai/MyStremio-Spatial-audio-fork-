@@ -61,6 +61,15 @@ function Repair-WebUiLanguageEmbeds {
         }
     }
 
+    $prebootScript = Join-Path $ScriptRoot "patch-webui-preboot.py"
+    $prebootAsset = Join-Path $ProjectRoot "assets\custom_preboot.js"
+    if (Test-Path $prebootScript) {
+        python $prebootScript $WebUiDirectory $prebootAsset
+        if ($LASTEXITCODE -ne 0) {
+            throw "Preboot patch failed with exit code $LASTEXITCODE"
+        }
+    }
+
     $verifyScript = Join-Path $ScriptRoot "verify-webui-main.js.py"
     if (Test-Path $verifyScript) {
         python $verifyScript $mainJs.FullName

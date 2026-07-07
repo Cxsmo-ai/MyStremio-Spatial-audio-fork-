@@ -21,6 +21,22 @@ PATCHES: list[tuple[str, str]] = [
         "case 0:return t=(0,_.loadCachedTitles)(),a=null!==(o=null==t?void 0:t.length)&&void 0!==o?o:0,e.next=2,Promise.resolve(a>0?t:[i({},r.FALLBACK_TITLES[0])]);",
         "case 0:return t=(0,_.loadCachedTitles)(),a=null!==(o=null==t?void 0:t.length)&&void 0!==o?o:0,e.next=2,Promise.resolve(a>0?t:[]);",
     ),
+    (
+        ',h=(0,_.useCallback)(function(e){(0,S.navigateToTitle)(e.id,e.type)},[]),f=(P=[(p=r).year],p.duration&&"Unknown"!==p.duration&&P.push(p.duration),p.seasons&&"Unknown"!==p.seasons&&P.push(p.seasons),P);return',
+        ',h=(0,_.useCallback)(function(e){(0,S.navigateToTitle)(e.id,e.type)},[]);if(!r)return _.default.createElement("div",{ref:m,key:D,className:A.default["hero-row"]},_.default.createElement("div",{className:(0,T.default)("mystremio-hero-slot",A.default["hero-slot"]),"data-state":"loading"},_.default.createElement("div",{className:(0,T.default)("mystremio-hero-slot-loader",A.default["hero-slot-loader"]),"aria-hidden":!0},_.default.createElement("div",{className:(0,T.default)("mystremio-hero-slot-spinner",A.default["hero-slot-spinner"])}))));var f=(P=[r.year],r.duration&&"Unknown"!==r.duration&&P.push(r.duration),r.seasons&&"Unknown"!==r.seasons&&P.push(r.seasons),P);return',
+    ),
+    (
+        "preloadHeroImages=function(e){var t=function(e){return new Promise(function(t){if(e){var a=new Image",
+        "preloadHeroImages=function(e){if(!e)return Promise.resolve({background:!1,logo:!1});var t=function(e){return new Promise(function(t){if(e){var a=new Image",
+    ),
+    (
+        "B.current.length<=1&&A(r.FALLBACK_TITLES.map(function(e){return i({},e)}))",
+        "B.current.length<=1&&A([])",
+    ),
+    (
+        "case 4:return A(r.FALLBACK_TITLES.map(function(e){return i({},e)})),[4,H()];",
+        "case 4:return A([]),[4,H()];",
+    ),
 ]
 
 REGEX_PATCHES: list[tuple[re.Pattern[str], str]] = [
@@ -38,6 +54,12 @@ REGEX_PATCHES: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"(\?[^:]+:)r\.FALLBACK_TITLES\[0\](?=[,\]\)])"),
         r"\1null",
     ),
+    (
+        re.compile(
+            r"A\([^)]+\.FALLBACK_TITLES\.map\(function\(e\)\{return i\(\{\},e\)\}\)\)"
+        ),
+        "A([])",
+    ),
 ]
 
 
@@ -53,7 +75,7 @@ def patch_main_js(path: Path) -> None:
         text = pattern.sub(replacement, text)
 
     if text == original:
-        if "FALLBACK_TITLES[0]" not in text:
+        if "FALLBACK_TITLES[0]" not in text and "if(!e)return Promise.resolve({background:!1,logo:!1})" in text:
             print(f"Hero fallback patch already applied in {path}")
             return
         print(

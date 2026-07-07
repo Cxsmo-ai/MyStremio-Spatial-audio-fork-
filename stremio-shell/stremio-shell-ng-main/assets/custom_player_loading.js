@@ -43,6 +43,14 @@
     return /#\/player/.test(location.hash || '');
   }
 
+  function shouldEnterPlayerSession() {
+    if (!isPlayerRoute()) return false;
+    if (typeof window.__stremioCustomIsColdStartPlayerBlocked === 'function') {
+      return !window.__stremioCustomIsColdStartPlayerBlocked();
+    }
+    return true;
+  }
+
   function extractImdbId(value) {
     if (!value || typeof value !== 'string') return null;
     const match = value.match(/tt\d{7,8}/i);
@@ -206,14 +214,24 @@
     }, ms);
   }
 
+  function hideAppLoadingMask() {
+    const mask = document.getElementById(APP_LOADING_MASK_ID);
+    if (!mask) return;
+    if (appMaskTimer) {
+      clearTimeout(appMaskTimer);
+      appMaskTimer = null;
+    }
+    mask.classList.remove('visible');
+    mask.style.display = 'none';
+    mask.style.opacity = '0';
+    mask.style.pointerEvents = 'none';
+  }
+
+  window.__stremioCustomHideAppLoadingMask = hideAppLoadingMask;
+
   function showBootLoadingMaskUntilReady() {
-    if (!document.body) return;
-    showAppLoadingMask(1400);
-    document.addEventListener(
-      'stremio-custom-bootstrap-ready',
-      () => setTimeout(() => document.getElementById(APP_LOADING_MASK_ID)?.classList.remove('visible'), 60),
-      { once: true }
-    );
+    // Native splash covers cold start; avoid a second full-screen mask that can get stuck.
+    hideAppLoadingMask();
   }
 
   function playerRoot() {
@@ -435,16 +453,21 @@
     else punchMpvViewport();
   }
 
-  function onPlayerLeave() {
+  function onPlayerLeave(options = {}) {
+    const hadActiveSession = phase !== Phase.IDLE || pendingSession;
     endSession();
-    showAppLoadingMask(190, { contentOnly: true });
+    if (!options.silent && hadActiveSession) {
+      showAppLoadingMask(190, { contentOnly: true });
+    } else {
+      hideAppLoadingMask();
+    }
   }
 
   window.StremioCustomPlayerSplash = { cacheArtwork: mergeArtwork };
 
   window.__stremioCustomPlayerLoadingEnsure = () => {
-    if (isPlayerRoute()) onPlayerEnter();
-    else onPlayerLeave();
+    if (shouldEnterPlayerSession()) onPlayerEnter();
+    else onPlayerLeave({ silent: true });
   };
 
   window.addEventListener('hashchange', () => {
@@ -453,7 +476,7 @@
   });
 
   document.addEventListener('stremio-custom-bootstrap-ready', () => {
-    if (isPlayerRoute()) onPlayerEnter();
+    if (shouldEnterPlayerSession()) onPlayerEnter();
   });
   document.addEventListener('stremio-custom-stream-started', onStreamStarted);
   document.addEventListener('stremio-custom-mpv-time', () => {
@@ -465,7 +488,7 @@
   ensureTopSeamFix();
   ensureScrollbarFix();
   showBootLoadingMaskUntilReady();
-  if (isPlayerRoute()) onPlayerEnter();
+  if (shouldEnterPlayerSession()) onPlayerEnter();
 
   console.info('[StremioCustom] Player session manager ready.');
 })();

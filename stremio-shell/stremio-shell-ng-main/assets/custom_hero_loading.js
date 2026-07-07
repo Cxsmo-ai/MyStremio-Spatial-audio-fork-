@@ -5,10 +5,57 @@
   window.__stremioCustomHeroLoading = true;
 
   const STYLE_ID = 'mystremio-hero-loading-style';
+  const FALLBACK_HERO_ID = 'tt0903747';
+  const PLACEHOLDER_SRC = /stremio_symbol|anonymous\.png|placeholder/i;
 
   function isBoardRoute() {
     const hash = location.hash || '#/';
     return hash === '#/' || hash === '#/board' || /^#\/board(?:\/|$|\?|#)/.test(hash);
+  }
+
+  function isFallbackHeroContent(slot) {
+    const imgs = slot.querySelectorAll('[class*="hero-container"] img[src], [class*="hero-image-stack"] img[src]');
+    for (const img of imgs) {
+      const src = img.getAttribute('src') || img.src || '';
+      if (src && (src.includes(FALLBACK_HERO_ID) || /breaking[\s_-]?bad/i.test(src))) {
+        return true;
+      }
+    }
+
+    const titleNode = slot.querySelector('[class*="hero-title"], [class*="hero-overlay"] h1, [class*="hero-overlay"] h2');
+    const title = String(titleNode?.textContent || '').trim();
+    if (/^breaking bad$/i.test(title)) return true;
+
+    return false;
+  }
+
+  function hasRealHeroImage(slot) {
+    const img = slot.querySelector('[class*="hero-container"] img[src], [class*="hero-image-stack"] img[src]');
+    const src = img?.getAttribute('src') || img?.src || '';
+    if (!src || PLACEHOLDER_SRC.test(src)) return false;
+    if (src.includes(FALLBACK_HERO_ID) || /breaking[\s_-]?bad/i.test(src)) return false;
+    return true;
+  }
+
+  function ensureSlotLoader(slot) {
+    if (slot.querySelector('[class*="hero-slot-loader"]')) return;
+    const loader = document.createElement('div');
+    loader.className = 'mystremio-hero-slot-loader';
+    loader.setAttribute('aria-hidden', 'true');
+    const spinner = document.createElement('div');
+    spinner.className = 'mystremio-hero-slot-spinner';
+    loader.appendChild(spinner);
+    slot.appendChild(loader);
+  }
+
+  function setSlotLoading(slot) {
+    ensureSlotLoader(slot);
+    slot.dataset.state = 'loading';
+  }
+
+  function clearSlotLoading(slot) {
+    if (slot.dataset.state !== 'loading') return;
+    delete slot.dataset.state;
   }
 
   function ensureStyles() {
@@ -26,19 +73,39 @@
         pointer-events: none !important;
       }
 
-      [class*="hero-slot"][data-state="loading"] [class*="hero-slot-loader"] {
+      [class*="hero-slot"][data-state="loading"] [class*="hero-slot-loader"],
+      [class*="hero-slot"][data-state="loading"] .mystremio-hero-slot-loader {
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
         justify-content: center !important;
         gap: 1rem !important;
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 5 !important;
         min-height: 18rem !important;
         width: 100% !important;
         opacity: 1 !important;
         visibility: visible !important;
+        background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 50%, #0c0c0c 100%) !important;
       }
 
-      [class*="hero-slot"][data-state="loading"] [class*="hero-slot-loader"]::after {
+      [class*="hero-slot"][data-state="loading"] [class*="hero-slot-spinner"],
+      [class*="hero-slot"][data-state="loading"] .mystremio-hero-slot-spinner {
+        width: 42px !important;
+        height: 42px !important;
+        border-radius: 50% !important;
+        border: 3px solid rgba(255, 255, 255, 0.12) !important;
+        border-top-color: rgba(255, 255, 255, 0.85) !important;
+        animation: mystremio-hero-spin 0.9s linear infinite !important;
+      }
+
+      @keyframes mystremio-hero-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      [class*="hero-slot"][data-state="loading"] [class*="hero-slot-loader"]::after,
+      [class*="hero-slot"][data-state="loading"] .mystremio-hero-slot-loader::after {
         content: '' !important;
         display: block !important;
         width: min(320px, 70%) !important;
@@ -49,7 +116,8 @@
         position: relative !important;
       }
 
-      [class*="hero-slot"][data-state="loading"] [class*="hero-slot-loader"]::before {
+      [class*="hero-slot"][data-state="loading"] [class*="hero-slot-loader"]::before,
+      [class*="hero-slot"][data-state="loading"] .mystremio-hero-slot-loader::before {
         content: '' !important;
         position: absolute !important;
         width: min(320px, 70%) !important;
@@ -75,19 +143,22 @@
   function markLoadingSlots() {
     if (!isBoardRoute()) return;
     document.querySelectorAll('[class*="hero-slot"]').forEach((slot) => {
-      if (slot.dataset.state === 'loading') return;
-      const hasHero = slot.querySelector('[class*="hero-container"]');
+      if (isFallbackHeroContent(slot)) {
+        setSlotLoading(slot);
+        return;
+      }
+      if (hasRealHeroImage(slot)) return;
+      const hasHero = slot.querySelector('[class*="hero-container"], [class*="hero-image-stack"]');
       if (!hasHero) return;
-      slot.dataset.state = 'loading';
+      setSlotLoading(slot);
     });
   }
 
   function clearLoadingWhenReady() {
     document.querySelectorAll('[class*="hero-slot"][data-state="loading"]').forEach((slot) => {
-      const img = slot.querySelector('[class*="hero-container"] img[src]');
-      const src = img?.getAttribute('src') || img?.src || '';
-      if (!src || /stremio_symbol|anonymous\.png|placeholder/i.test(src)) return;
-      delete slot.dataset.state;
+      if (isFallbackHeroContent(slot)) return;
+      if (!hasRealHeroImage(slot)) return;
+      clearSlotLoading(slot);
     });
   }
 

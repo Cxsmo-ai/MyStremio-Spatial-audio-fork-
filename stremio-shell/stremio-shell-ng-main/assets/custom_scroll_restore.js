@@ -9,8 +9,11 @@
   const LEFT_VIA_NAV_KEY = 'stremio-custom-board-left-via-nav';
 
   const RESTORE_WINDOW_MS = 5000;
+  const HERO_LAYOUT_GRACE_MS = 2500;
 
   let savedScrollTop = 0;
+  let boardMountAt = 0;
+  let hadInAppNavigation = false;
   let lastHash = location.hash;
   let restoreUntil = 0;
   let userOverrodeRestore = false;
@@ -261,12 +264,38 @@
     cancelRestore();
   }
 
+  function clearStaleBoardSessionFlags() {
+    clearSavedPosition();
+    setResetToTopOnReturn(false);
+    try {
+      sessionStorage.removeItem(LEFT_VIA_NAV_KEY);
+    } catch (_) {}
+  }
+
+  function enterBoardRoute(fromDetailOrPlayer) {
+    boardMountAt = Date.now();
+
+    if (fromDetailOrPlayer) {
+      loadPersistedScroll();
+      ensureBoardObserver();
+      scheduleRestore();
+      return;
+    }
+
+    clearStaleBoardSessionFlags();
+    cancelRestore();
+    ensureBoardObserver();
+    scrollBoardToTop();
+  }
+
   function onRouteChange() {
     const prevHash = lastHash;
     const nextHash = location.hash;
+    const fromDetailOrPlayer = hadInAppNavigation && isDetailOrPlayerHash(prevHash);
 
     if (isBoardHash(prevHash) && !shouldResetToTopOnReturn()) {
       if (isDetailOrPlayerHash(nextHash)) {
+        hadInAppNavigation = true;
         captureScroll();
       } else if (isOtherAppRoute(nextHash)) {
         try {
@@ -279,16 +308,14 @@
 
     if (isBoardRoute()) {
       try {
-        if (sessionStorage.getItem(LEFT_VIA_NAV_KEY) === 'true') {
+        if (!fromDetailOrPlayer && sessionStorage.getItem(LEFT_VIA_NAV_KEY) === 'true') {
           sessionStorage.removeItem(LEFT_VIA_NAV_KEY);
           setResetToTopOnReturn(true);
           clearSavedPosition();
         }
       } catch (_) {}
 
-      loadPersistedScroll();
-      ensureBoardObserver();
-      scheduleRestore();
+      enterBoardRoute(fromDetailOrPlayer);
     } else {
       cancelRestore();
     }
@@ -349,6 +376,7 @@
 
   document.addEventListener('stremio-custom-hero-layout-changed', () => {
     if (!isBoardRoute() || !isRestoreSessionActive()) return;
+    if (Date.now() - boardMountAt < HERO_LAYOUT_GRACE_MS) return;
     const el = getBoardScrollEl();
     if (!el) return;
     applyActiveRestore(el);
@@ -360,9 +388,8 @@
     }
   }, 250);
 
-  loadPersistedScroll();
   if (isBoardRoute()) {
-    ensureBoardObserver();
+    enterBoardRoute(false);
   }
 
   window.StremioCustomScrollRestore = {

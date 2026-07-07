@@ -47,6 +47,8 @@ function contentType(filePath) {
       return 'font/woff';
     case '.woff2':
       return 'font/woff2';
+    case '.wasm':
+      return 'application/wasm';
     default:
       return 'application/octet-stream';
   }
