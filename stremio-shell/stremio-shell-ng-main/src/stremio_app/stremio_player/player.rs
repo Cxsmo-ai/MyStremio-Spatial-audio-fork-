@@ -5,6 +5,8 @@ use flume::{Receiver, Sender};
 use libmpv2::{events::Event, events::EventContext, Format, Mpv, SetData};
 use native_windows_gui::{self as nwg, PartialUi};
 use std::{
+    env,
+    path::{Path, PathBuf},
     sync::Arc,
     thread::{self, JoinHandle},
 };
@@ -59,6 +61,7 @@ impl PartialUi for Player {
 }
 
 fn create_shareable_mpv(window_handle: HWND) -> Arc<Mpv> {
+    let omniphony = OmniphonyRuntime::discover();
     let mpv = Mpv::with_initializer(|initializer| {
         macro_rules! set_property {
             ($name:literal, $value:expr) => {
@@ -67,10 +70,24 @@ fn create_shareable_mpv(window_handle: HWND) -> Arc<Mpv> {
                     .expect(concat!("failed to set ", $name));
             };
         }
+        macro_rules! set_optional_property {
+            ($name:literal, $value:expr) => {
+                if let Err(error) = initializer.set_property($name, $value) {
+                    eprintln!("ignored optional mpv option {}: {error:?}", $name);
+                }
+            };
+        }
         set_property!("wid", window_handle as i64);
         set_property!("title", "MyStremio");
         set_property!("audio-client-name", "MyStremio");
         set_property!("terminal", "yes");
+        set_property!("config", "yes");
+        if let Some(config_dir) = omniphony.config_dir.as_deref() {
+            set_property!("config-dir", config_dir);
+        }
+        if let Some(input_conf) = omniphony.input_conf.as_deref() {
+            set_property!("input-conf", input_conf);
+        }
         #[cfg(debug_assertions)]
         set_property!("msg-level", "all=no,cplayer=debug");
         #[cfg(not(debug_assertions))]
@@ -84,11 +101,77 @@ fn create_shareable_mpv(window_handle: HWND) -> Arc<Mpv> {
         set_property!("demuxer-max-bytes", "200MiB");
         set_property!("cache-pause-initial", "no");
         set_property!("vo", "gpu-next,");
+        set_property!("gpu-api", "vulkan");
+        set_optional_property!("ad", "orender,lavc,");
+        set_optional_property!("ad-orender-osc", "yes");
+        set_optional_property!("ad-orender-osc-rx-port", 9000i64);
+        set_optional_property!("ad-orender-osc-port", 9000i64);
+        set_optional_property!("ad-orender-osc-bind", "127.0.0.1");
+        set_optional_property!("ad-orender-osc-monitor-target", "127.0.0.1");
+        if let Some(orender_library) = omniphony.orender_library.as_deref() {
+            set_optional_property!("ad-orender-library", orender_library);
+        }
+        if let Some(bridge_path) = omniphony.bridge_path.as_deref() {
+            set_optional_property!("ad-orender-bridge-path", bridge_path);
+        }
+        if let Some(render_config) = omniphony.render_config.as_deref() {
+            set_optional_property!("ad-orender-config", render_config);
+        }
         Ok(())
     });
     let mpv = Arc::new(mpv.expect("cannot build MPV"));
     apply_stored_player_volume(&mpv);
     mpv
+}
+
+struct OmniphonyRuntime {
+    config_dir: Option<String>,
+    input_conf: Option<String>,
+    orender_library: Option<String>,
+    bridge_path: Option<String>,
+    render_config: Option<String>,
+}
+
+impl OmniphonyRuntime {
+    fn discover() -> Self {
+        let exe_dir = env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let _ = env::set_current_dir(&exe_dir);
+
+        let candidate_roots = [exe_dir];
+        let config_dir = first_existing(&candidate_roots, "portable_config");
+        let input_conf = config_dir
+            .as_ref()
+            .map(|p| p.join("input.conf"))
+            .filter(|p| p.exists());
+        let orender_library = first_existing(&candidate_roots, "orender.dll");
+        let bridge_path = first_existing(&candidate_roots, "harletty_bridge.dll");
+        let render_config = first_existing(&candidate_roots, r"configs\binaural-headphones.yaml")
+            .or_else(|| first_existing(&candidate_roots, r"configs\omniphony-portable.yaml"))
+            .or_else(|| first_existing(&candidate_roots, r"configs\voicemeeter-7.1.yaml"))
+            .or_else(|| first_existing(&candidate_roots, r"configs\high-channel-7.1.4.yaml"));
+
+        Self {
+            config_dir: path_to_mpv_string(config_dir),
+            input_conf: path_to_mpv_string(input_conf),
+            orender_library: path_to_mpv_string(orender_library),
+            bridge_path: path_to_mpv_string(bridge_path),
+            render_config: path_to_mpv_string(render_config),
+        }
+    }
+}
+
+fn first_existing(roots: &[PathBuf], relative: &str) -> Option<PathBuf> {
+    roots
+        .iter()
+        .map(|root| root.join(relative))
+        .find(|path| path.exists())
+}
+
+fn path_to_mpv_string(path: Option<PathBuf>) -> Option<String> {
+    path.map(|p| p.to_string_lossy().replace('\\', "/"))
 }
 
 fn cmd_is_loadfile(cmd: &CmdVal) -> bool {

@@ -8,6 +8,10 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 $ReleaseDir = Join-Path $ProjectRoot "target\$Target\release"
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "..\.."))
+$AppsRoot = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "..\..\.."))
+$PortableRoot = Join-Path $AppsRoot "MyStremio"
+$PortableBuildRoot = Join-Path $PortableRoot "_build"
+$RuntimeSource = Join-Path $PortableBuildRoot "stremio-runtime-source"
 $DefaultAssetSource = Join-Path $RepoRoot "assets-bundle"
 if (-not $env:MYSTREMIO_ASSET_SOURCE_ROOT) {
     $env:MYSTREMIO_ASSET_SOURCE_ROOT = $DefaultAssetSource
@@ -52,9 +56,12 @@ function Ensure-MpvImportLib {
     if (Test-Path $ImportLib) { return }
 
     $DllCandidates = @(
+        $env:OMNIPHONY_LIBMPV,
+        (Join-Path $AppsRoot "omniphony-libmpv-bundle\libmpv-2.dll"),
         (Join-Path $ProjectRoot "libmpv-2.dll"),
+        (Join-Path $RuntimeSource "libmpv-2.dll"),
         (Join-Path $env:LOCALAPPDATA "Programs\Stremio\libmpv-2.dll")
-    )
+    ) | Where-Object { $_ }
     $MpvDll = $DllCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $MpvDll) {
         throw "libmpv-2.dll not found. Install Stremio Desktop or place libmpv-2.dll in project root."
@@ -106,13 +113,28 @@ function Ensure-MpvImportLib {
 }
 
 function Ensure-Cargo {
+    $ToolchainBin = Join-Path $PortableBuildRoot "rust-toolchain\bin"
+    $CargoBin = Join-Path $ToolchainBin "cargo.exe"
+    $RustcBin = Join-Path $ToolchainBin "rustc.exe"
+    if ((Test-Path $CargoBin) -and (Test-Path $RustcBin)) {
+        return @{
+            Cargo = $CargoBin
+            Rustc = $RustcBin
+        }
+    }
     if (Get-Command cargo -ErrorAction SilentlyContinue) {
-        return
+        return @{
+            Cargo = (Get-Command cargo).Source
+            Rustc = ""
+        }
     }
     $CargoBin = Join-Path $env:USERPROFILE ".cargo\bin\cargo.exe"
     if (Test-Path $CargoBin) {
         $env:Path = "$(Split-Path $CargoBin);$env:Path"
-        return
+        return @{
+            Cargo = $CargoBin
+            Rustc = ""
+        }
     }
     throw "Rust/Cargo not found. Install from https://rustup.rs/"
 }
@@ -122,7 +144,7 @@ function Get-VcVarsBat {
     return (Join-Path $VsPath "VC\Auxiliary\Build\vcvars64.bat")
 }
 
-Ensure-Cargo
+$RustTools = Ensure-Cargo
 Ensure-MpvImportLib -Arch $Target
 $VcVars = Get-VcVarsBat
 $TargetDir = Join-Path $ProjectRoot "target"
@@ -131,11 +153,13 @@ $TargetDir = Join-Path $ProjectRoot "target"
 
 $BuildCmd = @(
     "call `"$VcVars`"",
-    "set PATH=%USERPROFILE%\.cargo\bin;%PATH%",
+    "set `"CARGO_HOME=$PortableBuildRoot\cargo-home`"",
+    $(if ($RustTools.Rustc) { "set `"RUSTC=$($RustTools.Rustc)`"" } else { $null }),
     "set `"CARGO_TARGET_DIR=$TargetDir`"",
     "cd /d `"$ProjectRoot`"",
-    "cargo build --release --target $Target"
-) -join " && "
+    "`"$($RustTools.Cargo)`" build --release --target $Target"
+) | Where-Object { $_ }
+$BuildCmd = $BuildCmd -join " && "
 
 Write-Host "Building mystremio-shell ($Target)..."
 cmd /c $BuildCmd
@@ -143,7 +167,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "cargo build failed with exit code $LASTEXITCODE"
 }
 
-& (Join-Path $ProjectRoot "scripts\prepare-runtime.ps1") -OutputDir $ReleaseDir
+& (Join-Path $ProjectRoot "scripts\prepare-runtime.ps1") -OutputDir $ReleaseDir -SourceDir $RuntimeSource
 
 if (-not $SkipShortcut) {
     & (Join-Path $ProjectRoot "scripts\create-desktop-shortcut.ps1") -ReleaseDir $ReleaseDir

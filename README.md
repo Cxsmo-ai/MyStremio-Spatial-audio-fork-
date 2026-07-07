@@ -50,6 +50,17 @@ If you want to support my work you can leave a small tip on [ko-fi]( https://ko-
 
 ---
 
+## 🏗️ Architecture
+
+MyStremio is a heavily modified, high-performance fork of the standard Stremio desktop client that completely ditches the Electron framework. 
+
+- **Rust-based WebView2 Shell (`stremio-shell-ng-main`)**: The core orchestrator. Manages the server, window, and native IPC integrations (like Discord Rich Presence).
+- **MPV Omniphony Player (`mpv-x64`)**: Delegates all media decoding to a custom `mpv` build with advanced spatial audio capabilities (`orender` engine) instead of the standard WebPlayer.
+- **Runtime JavaScript Injections (`assets/custom_*.js`)**: Instead of maintaining a bulky fork of the massive React codebase of Stremio Web, MyStremio uses a "monkey-patching" approach. It injects custom `.js` scripts into the WebView at runtime to forcefully add features (Liquid Glass, Smart Vibrance, Seek Buttons) directly into the UI.
+- **Custom API (`custom_api/`)**: Overrides storage paths (saving to `%APPDATA%\mystremio`) to ensure isolated, stable user settings without conflicting with vanilla Stremio.
+
+---
+
 ## 🚀 Features
 
 ### 🏠 Board hero home view
