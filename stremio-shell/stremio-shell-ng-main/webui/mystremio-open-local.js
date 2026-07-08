@@ -58,20 +58,80 @@
       if (!files || files.length === 0) return;
 
       try {
-        // Construct a standard Stremio Stream object pointing to the local file
-        const fileUrl = 'file:///' + files[0].path.replace(/\\/g, '/');
-        const streamObj = {
-          url: fileUrl,
-          name: 'Local File',
+        // 1. Force Stremio to open the Player and initialize MPV using a dummy HTTP stream
+        const dummyStream = {
+          url: "http://127.0.0.1:11470/ping", // Fake URL to force MPV initialization
+          name: "Omniphony Local",
           title: files[0].name
         };
+        // Navigate the Stremio React Router to the dummy stream
+        window.location.hash = '#/player/movie/local/local?stream=' + encodeURIComponent(JSON.stringify(dummyStream));
 
-        // Navigate the Stremio React Router directly to the player!
-        // This forces Stremio to initialize MPV properly and load the video with full UI controls.
-        window.location.hash = '#/player/local/local/local?stream=' + encodeURIComponent(JSON.stringify(streamObj));
+        // 2. Wait for MPV to boot up, then hijack it with the actual local file!
+        setTimeout(() => {
+          const msgId = Math.floor(Math.random() * 100000);
+          
+          // Command MPV to drop the dummy URL and load the real local file
+          window.chrome.webview.postMessage(JSON.stringify({
+            id: msgId,
+            args: ['mpv-command', ['loadfile', files[0].path]]
+          }));
+          
+          // Hide Stremio's React UI (the buffering screen) so the MPV video is fully visible
+          const appDiv = document.getElementById('app');
+          if (appDiv) {
+            appDiv.style.transition = 'opacity 0.4s ease';
+            appDiv.style.opacity = '0';
+            appDiv.style.pointerEvents = 'none'; // Allows mouse clicks to pass through to MPV!
+          }
+          
+          // Create a 'Close Local Movie' button overlay
+          let closeBtn = document.getElementById('mystremio-close-local-btn');
+          if (!closeBtn) {
+            closeBtn = document.createElement('button');
+            closeBtn.id = 'mystremio-close-local-btn';
+            closeBtn.innerText = 'Stop Local Movie';
+            closeBtn.style.position = 'fixed';
+            closeBtn.style.top = '25px';
+            closeBtn.style.right = '25px';
+            closeBtn.style.zIndex = '999999';
+            closeBtn.style.padding = '12px 24px';
+            closeBtn.style.background = 'rgba(0, 0, 0, 0.8)';
+            closeBtn.style.color = '#fff';
+            closeBtn.style.border = '2px solid rgba(255,255,255,0.3)';
+            closeBtn.style.borderRadius = '8px';
+            closeBtn.style.cursor = 'pointer';
+            closeBtn.style.fontSize = '16px';
+            closeBtn.style.fontWeight = 'bold';
+            closeBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+            
+            closeBtn.addEventListener('click', () => {
+              // Stop MPV playback
+              window.chrome.webview.postMessage(JSON.stringify({
+                id: msgId + 1,
+                args: ['mpv-command', ['stop']]
+              }));
+              
+              // Restore Stremio UI
+              if (appDiv) {
+                appDiv.style.opacity = '1';
+                appDiv.style.pointerEvents = 'auto';
+              }
+              // Navigate back to board to clear the player state
+              window.location.hash = '#/board';
+              closeBtn.style.display = 'none';
+            });
+            
+            closeBtn.addEventListener('mouseenter', () => closeBtn.style.background = 'rgba(40,40,40,0.9)');
+            closeBtn.addEventListener('mouseleave', () => closeBtn.style.background = 'rgba(0,0,0,0.8)');
+            
+            document.body.appendChild(closeBtn);
+          }
+          closeBtn.style.display = 'block';
+        }, 1200); // Wait 1.2s for Stremio to mount the player
 
       } catch (err) {
-        console.error('[StremioCustom] Failed to launch local stream via React Router', err);
+        console.error('[StremioCustom] Failed to launch local stream via MPV hijack', err);
       }
 
       // Reset the input so the same file can be opened again
