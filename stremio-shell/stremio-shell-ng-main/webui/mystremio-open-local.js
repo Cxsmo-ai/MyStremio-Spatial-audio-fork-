@@ -58,32 +58,56 @@
       if (!files || files.length === 0) return;
 
       try {
+        const localPath = files[0].path;
+
         // 1. Force Stremio to open the Player and initialize MPV using a dummy HTTP stream
         const dummyStream = {
-          url: "http://127.0.0.1:11470/ping", // Fake URL to force MPV initialization
+          url: "http://127.0.0.1:11470/ping", 
           name: "Omniphony Local",
           title: files[0].name
         };
-        // Navigate the Stremio React Router to the dummy stream
         window.location.hash = '#/player/movie/local/local?stream=' + encodeURIComponent(JSON.stringify(dummyStream));
 
-        // 2. Wait for MPV to boot up, then hijack it with the actual local file!
+        // 2. Monkey-patch Stremio's IPC to block it from interfering with our local movie
+        window.__isLocalMovieHijacked = true;
+        if (!window.__stremioIpcPatched && window.chrome && window.chrome.webview) {
+          window.__stremioIpcPatched = true;
+          window.__originalPostMessage = window.chrome.webview.postMessage;
+          window.chrome.webview.postMessage = function(msg) {
+            if (window.__isLocalMovieHijacked && typeof msg === 'string') {
+              // Block Stremio from loading its error streams or stopping MPV while our movie plays
+              if (msg.includes('"loadfile"') || msg.includes('"stop"')) {
+                return;
+              }
+            }
+            return window.__originalPostMessage.apply(this, arguments);
+          };
+        }
+
+        // 3. Inject forceful CSS to completely hide Stremio's React UI (bypassing React state overrides)
+        let style = document.getElementById('mystremio-hijack-style');
+        if (!style) {
+          style = document.createElement('style');
+          style.id = 'mystremio-hijack-style';
+          document.head.appendChild(style);
+        }
+        style.textContent = '#app { opacity: 0 !important; pointer-events: none !important; transition: opacity 0.4s ease !important; }';
+
+        // 4. Wait for Stremio to boot MPV, then securely command it!
         setTimeout(() => {
           const msgId = Math.floor(Math.random() * 100000);
           
-          // Command MPV to drop the dummy URL and load the real local file
-          window.chrome.webview.postMessage(JSON.stringify({
+          // Use the original postMessage to bypass our own interceptor
+          window.__originalPostMessage.call(window.chrome.webview, JSON.stringify({
             id: msgId,
-            args: ['mpv-command', ['loadfile', files[0].path]]
+            args: ['mpv-command', ['loadfile', localPath]]
           }));
           
-          // Hide Stremio's React UI (the buffering screen) so the MPV video is fully visible
-          const appDiv = document.getElementById('app');
-          if (appDiv) {
-            appDiv.style.transition = 'opacity 0.4s ease';
-            appDiv.style.opacity = '0';
-            appDiv.style.pointerEvents = 'none'; // Allows mouse clicks to pass through to MPV!
-          }
+          // Force MPV to unpause (in case Stremio's dummy stream paused it)
+          window.__originalPostMessage.call(window.chrome.webview, JSON.stringify({
+            id: msgId + 1,
+            args: ['mpv-command', ['set', 'pause', 'no']]
+          }));
           
           // Create a 'Close Local Movie' button overlay
           let closeBtn = document.getElementById('mystremio-close-local-btn');
@@ -106,18 +130,19 @@
             closeBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
             
             closeBtn.addEventListener('click', () => {
+              // Lift the hijack flag
+              window.__isLocalMovieHijacked = false;
+              
               // Stop MPV playback
-              window.chrome.webview.postMessage(JSON.stringify({
-                id: msgId + 1,
+              window.__originalPostMessage.call(window.chrome.webview, JSON.stringify({
+                id: msgId + 2,
                 args: ['mpv-command', ['stop']]
               }));
               
               // Restore Stremio UI
-              if (appDiv) {
-                appDiv.style.opacity = '1';
-                appDiv.style.pointerEvents = 'auto';
-              }
-              // Navigate back to board to clear the player state
+              style.textContent = '';
+              
+              // Navigate back to board
               window.location.hash = '#/board';
               closeBtn.style.display = 'none';
             });
@@ -128,7 +153,7 @@
             document.body.appendChild(closeBtn);
           }
           closeBtn.style.display = 'block';
-        }, 1200); // Wait 1.2s for Stremio to mount the player
+        }, 1200); 
 
       } catch (err) {
         console.error('[StremioCustom] Failed to launch local stream via MPV hijack', err);
