@@ -1,0 +1,88 @@
+# 7.1.4 Atmos-style speaker layout for high-channel Omniphony output.
+# Use this only when the chosen Windows/ASIO device can accept 12 channels.
+
+speakers:
+  - name: "FL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "FR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "C"
+    coord_mode: "cartesian"
+    x: 0.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "LFE"
+    coord_mode: "cartesian"
+    x: 0.0
+    y: 0.0
+    z: -0.5
+    spatialize: false
+
+  - name: "SL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 0.0
+    z: 0.0
+    spatialize: true
+
+  - name: "SR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 0.0
+    z: 0.0
+    spatialize: true
+
+  - name: "BL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: -1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "BR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: -1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "TFL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 1.0
+    z: 1.0
+    spatialize: true
+
+  - name: "TFR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 1.0
+    z: 1.0
+    spatialize: true
+
+  - name: "TBL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: -1.0
+    z: 1.0
+    spatialize: true
+
+  - name: "TBR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: -1.0
+    z: 1.0
+    spatialize: true
+
