@@ -57,21 +57,20 @@
       const files = e.target.files;
       if (!files || files.length === 0) return;
 
-      // Simulate a drag-and-drop event to trick Stremio into playing the local file
+      // Simulate a FULL drag-and-drop lifecycle to trick Stremio's React dropzone
       try {
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(files[0]);
 
-        const dropEvent = new DragEvent('drop', {
-          bubbles: true,
-          cancelable: true,
-          dataTransfer: dataTransfer
-        });
-        
-        // Dispatch to document, which bubbles to window where Stremio's drop listener lives
-        document.dispatchEvent(dropEvent);
+        const target = document.getElementById('app') || document.body;
+
+        // React dropzones require dragenter and dragover before drop!
+        target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer }));
+        target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
+        target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+
       } catch (err) {
-        console.error('[StremioCustom] Failed to dispatch drop event', err);
+        console.error('[StremioCustom] Failed to dispatch drop event lifecycle', err);
       }
 
       // Reset the input so the same file can be opened again
