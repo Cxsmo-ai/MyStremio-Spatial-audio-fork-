@@ -58,65 +58,20 @@
       if (!files || files.length === 0) return;
 
       try {
-        const msgId = Math.floor(Math.random() * 100000);
-        // Send the file directly to the MPV playback engine
-        window.chrome.webview.postMessage(JSON.stringify({
-          id: msgId,
-          args: ['mpv-command', ['loadfile', files[0].path]]
-        }));
+        // Construct a standard Stremio Stream object pointing to the local file
+        const fileUrl = 'file:///' + files[0].path.replace(/\\/g, '/');
+        const streamObj = {
+          url: fileUrl,
+          name: 'Local File',
+          title: files[0].name
+        };
 
-        // Fade out Stremio's Web UI so the video is visible underneath
-        const appDiv = document.getElementById('app');
-        if (appDiv) {
-          appDiv.style.transition = 'opacity 0.4s ease';
-          appDiv.style.opacity = '0';
-          appDiv.style.pointerEvents = 'none';
-        }
-
-        // Create a 'Close Local Movie' button overlay
-        let closeBtn = document.getElementById('mystremio-close-local-btn');
-        if (!closeBtn) {
-          closeBtn = document.createElement('button');
-          closeBtn.id = 'mystremio-close-local-btn';
-          closeBtn.innerText = 'Stop Local Movie';
-          closeBtn.style.position = 'fixed';
-          closeBtn.style.top = '25px';
-          closeBtn.style.right = '25px';
-          closeBtn.style.zIndex = '999999';
-          closeBtn.style.padding = '12px 24px';
-          closeBtn.style.background = 'rgba(0, 0, 0, 0.8)';
-          closeBtn.style.color = '#fff';
-          closeBtn.style.border = '2px solid rgba(255,255,255,0.3)';
-          closeBtn.style.borderRadius = '8px';
-          closeBtn.style.cursor = 'pointer';
-          closeBtn.style.fontSize = '16px';
-          closeBtn.style.fontWeight = 'bold';
-          closeBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
-          
-          closeBtn.addEventListener('click', () => {
-            // Stop MPV playback
-            window.chrome.webview.postMessage(JSON.stringify({
-              id: msgId + 1,
-              args: ['mpv-command', ['stop']]
-            }));
-            
-            // Restore Stremio UI
-            if (appDiv) {
-              appDiv.style.opacity = '1';
-              appDiv.style.pointerEvents = 'auto';
-            }
-            closeBtn.style.display = 'none';
-          });
-          
-          closeBtn.addEventListener('mouseenter', () => closeBtn.style.background = 'rgba(40,40,40,0.9)');
-          closeBtn.addEventListener('mouseleave', () => closeBtn.style.background = 'rgba(0,0,0,0.8)');
-          
-          document.body.appendChild(closeBtn);
-        }
-        closeBtn.style.display = 'block';
+        // Navigate the Stremio React Router directly to the player!
+        // This forces Stremio to initialize MPV properly and load the video with full UI controls.
+        window.location.hash = '#/player/local/local/local?stream=' + encodeURIComponent(JSON.stringify(streamObj));
 
       } catch (err) {
-        console.error('[StremioCustom] Failed to launch MPV directly', err);
+        console.error('[StremioCustom] Failed to launch local stream via React Router', err);
       }
 
       // Reset the input so the same file can be opened again
