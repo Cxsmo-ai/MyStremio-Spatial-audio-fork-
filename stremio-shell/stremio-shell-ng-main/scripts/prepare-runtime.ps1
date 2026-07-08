@@ -207,7 +207,7 @@ function Sync-OmniphonyRuntime {
         "ad=orender,lavc,",
         "ad-orender-library=orender.dll",
         "ad-orender-bridge-path=harletty_bridge.dll",
-        "ad-orender-config=configs/omniphony-portable.yaml",
+        "ad-orender-config=configs/binaural-headphones.yaml",
         "ad-orender-osc=yes",
         "ad-orender-osc-rx-port=9000",
         "ad-orender-osc-port=9000",
@@ -223,7 +223,9 @@ function Sync-OmniphonyRuntime {
         } else {
             $ExistingConfig = (Get-Content $PortableMpvConf -Raw) `
                 -replace 'ad-orender-osc-port=\d+', 'ad-orender-osc-port=9000' `
-                -replace 'ad-orender-osc-rx-port=\d+', 'ad-orender-osc-rx-port=9000'
+                -replace 'ad-orender-osc-rx-port=\d+', 'ad-orender-osc-rx-port=9000' `
+                -replace '(?m)^ad-orender-config=.*$', 'ad-orender-config=configs/binaural-headphones.yaml'
+            $ExistingConfig = $ExistingConfig -replace '(?m)^ad-orender-channel-render-mode=.*\r?\n?', ''
             if ($ExistingConfig -notmatch '(?m)^gpu-api=') {
                 $ExistingConfig = $ExistingConfig -replace '(?m)^(vo=gpu-next,?\r?\n)', "`$1gpu-api=vulkan`r`n"
             } else {
@@ -258,6 +260,7 @@ function Sync-OmniphonyRuntime {
     }
 
     $PortableYaml = Join-Path $OutputDir "configs\omniphony-portable.yaml"
+    $BinauralYaml = Join-Path $OutputDir "configs\binaural-headphones.yaml"
     $FullYaml = @(
         "render:",
         "  bridge_path: harletty_bridge.dll",
@@ -266,6 +269,23 @@ function Sync-OmniphonyRuntime {
         "  channel_render_mode: spatial",
         "  output_channel_mapping: by_index",
         "  ramp_mode: frame",
+        "  binaural:",
+        "    output_mode: binaural",
+        "    unit_scale_m: 1.0",
+        "    head_radius_m: 0.0875",
+        "    hrir_source: saf",
+        "    reflections:",
+        "      enabled: true",
+        "      room_width_m: 4.0",
+        "      room_depth_m: 5.0",
+        "      room_height_m: 2.7",
+        "      level: 0.35",
+        "    reverb:",
+        "      enabled: false",
+        "      level: 0.12",
+        "      rt60_s: 0.35",
+        "      predelay_ms: 20",
+        "    air_absorption: true",
         "  osc: true",
         "  osc_metering: true",
         "  osc_rx_port: 9000",
@@ -278,6 +298,43 @@ function Sync-OmniphonyRuntime {
         "  auto_gain_ceiling_db: -1.0"
     )
     Set-Content -Path $PortableYaml -Value $FullYaml -Encoding UTF8
+    $BinauralFullYaml = @(
+        "render:",
+        "  bridge_path: harletty_bridge.dll",
+        "  speaker_layout: layouts/7.1.4.yaml",
+        "  enable_vbap: true",
+        "  channel_render_mode: spatial",
+        "  output_channel_mapping: by_index",
+        "  ramp_mode: frame",
+        "  binaural:",
+        "    output_mode: binaural",
+        "    unit_scale_m: 1.0",
+        "    head_radius_m: 0.0875",
+        "    hrir_source: saf",
+        "    reflections:",
+        "      enabled: true",
+        "      room_width_m: 4.0",
+        "      room_depth_m: 5.0",
+        "      room_height_m: 2.7",
+        "      level: 0.35",
+        "    reverb:",
+        "      enabled: false",
+        "      level: 0.12",
+        "      rt60_s: 0.35",
+        "      predelay_ms: 20",
+        "    air_absorption: true",
+        "  osc: true",
+        "  osc_metering: true",
+        "  osc_rx_port: 9000",
+        "  osc_host: 127.0.0.1",
+        "  osc_port: 9000",
+        "  meter_rate: 30.0",
+        "  diag_rate: 10.0",
+        "  use_loudness: true",
+        "  auto_gain: true",
+        "  auto_gain_ceiling_db: -1.0"
+    )
+    Set-Content -Path $BinauralYaml -Value $BinauralFullYaml -Encoding UTF8
 
     Write-Host "Omniphony libmpv runtime synced to $OutputDir"
 }

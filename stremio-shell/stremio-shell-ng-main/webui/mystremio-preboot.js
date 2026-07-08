@@ -95,4 +95,20 @@
   disableServiceWorker();
   installCrashRecovery();
   window.__MYSTREMIO_REACT_HERO__ = true;
+
+  // MPV Stats Overlay Shortcut (Ctrl+O)
+  let mpvMsgId = 20000;
+  window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key.toLowerCase() === 'o') {
+      e.preventDefault();
+      if (!window.chrome?.webview?.postMessage) return;
+      mpvMsgId++;
+      try {
+        window.chrome.webview.postMessage(JSON.stringify({
+          id: mpvMsgId,
+          args: ['mpv-command', ['script-binding', 'stats/display-stats-toggle']]
+        }));
+      } catch (err) {}
+    }
+  });
 })();

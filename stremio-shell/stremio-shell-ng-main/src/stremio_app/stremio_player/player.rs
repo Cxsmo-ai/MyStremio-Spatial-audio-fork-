@@ -185,6 +185,29 @@ fn cmd_is_loadfile(cmd: &CmdVal) -> bool {
     )
 }
 
+fn loadfile_target(cmd: &CmdVal) -> Option<&str> {
+    match cmd {
+        CmdVal::Double(MpvCmd::Loadfile, path)
+        | CmdVal::Tripple(MpvCmd::Loadfile, path, _)
+        | CmdVal::Quadruple(MpvCmd::Loadfile, path, _, _)
+        | CmdVal::Quintuple(MpvCmd::Loadfile, path, _, _, _) => Some(path.as_str()),
+        _ => None,
+    }
+}
+
+fn is_transport_stream_target(target: &str) -> bool {
+    let target = target
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(target)
+        .trim_matches('"')
+        .trim_end_matches('/');
+    let lower = target.to_ascii_lowercase();
+    [".m2ts", ".mts", ".m2t", ".ts"]
+        .iter()
+        .any(|ext| lower.ends_with(ext))
+}
+
 fn apply_stored_player_volume(mpv: &Mpv) {
     let stored = custom_api::player_volume();
     if let Some(level) = stored.get("level").and_then(|value| value.as_f64()) {
@@ -192,6 +215,25 @@ fn apply_stored_player_volume(mpv: &Mpv) {
     }
     if let Some(muted) = stored.get("muted").and_then(|value| value.as_bool()) {
         let _ = mpv.set_property("mute", muted);
+    }
+}
+
+fn apply_loadfile_profile(cmd: &CmdVal, mpv: &Mpv) {
+    if let Some(target) = loadfile_target(cmd) {
+        if is_transport_stream_target(target) {
+            let _ = mpv.set_property("cache", "yes");
+            let _ = mpv.set_property("cache-secs", 120i64);
+            let _ = mpv.set_property("demuxer-readahead-secs", 120i64);
+            let _ = mpv.set_property("demuxer-max-bytes", "1GiB");
+            let _ = mpv.set_property("demuxer-max-back-bytes", "512MiB");
+            let _ = mpv.set_property("hwdec-extra-frames", 16i64);
+        } else {
+            let _ = mpv.set_property("cache-secs", 12i64);
+            let _ = mpv.set_property("demuxer-readahead-secs", 12i64);
+            let _ = mpv.set_property("demuxer-max-bytes", "200MiB");
+            let _ = mpv.set_property("demuxer-max-back-bytes", "100MiB");
+            let _ = mpv.set_property("hwdec-extra-frames", 6i64);
+        }
     }
 }
 
@@ -280,6 +322,7 @@ fn create_message_thread(
         let send_command = |cmd: &CmdVal| {
             if cmd_is_loadfile(cmd) {
                 apply_stored_player_volume(&mpv);
+                apply_loadfile_profile(cmd, &mpv);
             }
             let cmd = cmd.clone();
             let a1;

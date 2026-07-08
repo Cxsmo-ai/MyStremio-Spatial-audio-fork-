@@ -122,6 +122,15 @@ function Ensure-Cargo {
             Rustc = $RustcBin
         }
     }
+    $UserToolchainBin = Join-Path $env:USERPROFILE ".rustup\toolchains\stable-x86_64-pc-windows-msvc\bin"
+    $CargoBin = Join-Path $UserToolchainBin "cargo.exe"
+    $RustcBin = Join-Path $UserToolchainBin "rustc.exe"
+    if ((Test-Path $CargoBin) -and (Test-Path $RustcBin)) {
+        return @{
+            Cargo = $CargoBin
+            Rustc = $RustcBin
+        }
+    }
     if (Get-Command cargo -ErrorAction SilentlyContinue) {
         return @{
             Cargo = (Get-Command cargo).Source
