@@ -57,20 +57,66 @@
       const files = e.target.files;
       if (!files || files.length === 0) return;
 
-      // Simulate a FULL drag-and-drop lifecycle to trick Stremio's React dropzone
       try {
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(files[0]);
+        const msgId = Math.floor(Math.random() * 100000);
+        // Send the file directly to the MPV playback engine
+        window.chrome.webview.postMessage(JSON.stringify({
+          id: msgId,
+          args: ['mpv-command', ['loadfile', files[0].path]]
+        }));
 
-        const target = document.getElementById('app') || document.body;
+        // Fade out Stremio's Web UI so the video is visible underneath
+        const appDiv = document.getElementById('app');
+        if (appDiv) {
+          appDiv.style.transition = 'opacity 0.4s ease';
+          appDiv.style.opacity = '0';
+          appDiv.style.pointerEvents = 'none';
+        }
 
-        // React dropzones require dragenter and dragover before drop!
-        target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer }));
-        target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
-        target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+        // Create a 'Close Local Movie' button overlay
+        let closeBtn = document.getElementById('mystremio-close-local-btn');
+        if (!closeBtn) {
+          closeBtn = document.createElement('button');
+          closeBtn.id = 'mystremio-close-local-btn';
+          closeBtn.innerText = 'Stop Local Movie';
+          closeBtn.style.position = 'fixed';
+          closeBtn.style.top = '25px';
+          closeBtn.style.right = '25px';
+          closeBtn.style.zIndex = '999999';
+          closeBtn.style.padding = '12px 24px';
+          closeBtn.style.background = 'rgba(0, 0, 0, 0.8)';
+          closeBtn.style.color = '#fff';
+          closeBtn.style.border = '2px solid rgba(255,255,255,0.3)';
+          closeBtn.style.borderRadius = '8px';
+          closeBtn.style.cursor = 'pointer';
+          closeBtn.style.fontSize = '16px';
+          closeBtn.style.fontWeight = 'bold';
+          closeBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+          
+          closeBtn.addEventListener('click', () => {
+            // Stop MPV playback
+            window.chrome.webview.postMessage(JSON.stringify({
+              id: msgId + 1,
+              args: ['mpv-command', ['stop']]
+            }));
+            
+            // Restore Stremio UI
+            if (appDiv) {
+              appDiv.style.opacity = '1';
+              appDiv.style.pointerEvents = 'auto';
+            }
+            closeBtn.style.display = 'none';
+          });
+          
+          closeBtn.addEventListener('mouseenter', () => closeBtn.style.background = 'rgba(40,40,40,0.9)');
+          closeBtn.addEventListener('mouseleave', () => closeBtn.style.background = 'rgba(0,0,0,0.8)');
+          
+          document.body.appendChild(closeBtn);
+        }
+        closeBtn.style.display = 'block';
 
       } catch (err) {
-        console.error('[StremioCustom] Failed to dispatch drop event lifecycle', err);
+        console.error('[StremioCustom] Failed to launch MPV directly', err);
       }
 
       // Reset the input so the same file can be opened again
