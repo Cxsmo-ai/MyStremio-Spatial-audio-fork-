@@ -37,11 +37,21 @@
       svg.innerHTML = '<path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" fill="currentColor"/>';
     }
 
-    // Create a hidden file input
+    // Create a native file input that overlays the entire button (bulletproof)
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'video/*,audio/*,.mkv,.mp4,.avi,.m2ts';
-    fileInput.style.display = 'none';
+    fileInput.style.position = 'absolute';
+    fileInput.style.top = '0';
+    fileInput.style.left = '0';
+    fileInput.style.width = '100%';
+    fileInput.style.height = '100%';
+    fileInput.style.opacity = '0';
+    fileInput.style.cursor = 'pointer';
+    fileInput.style.zIndex = '10';
+
+    newBtn.style.position = 'relative';
+    newBtn.style.overflow = 'hidden';
 
     fileInput.addEventListener('change', (e) => {
       const files = e.target.files;
@@ -69,12 +79,6 @@
     });
 
     newBtn.appendChild(fileInput);
-
-    // Trigger file picker on click
-    newBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      fileInput.click();
-    });
 
     // Append to the bottom of the menu
     menuContainer.appendChild(newBtn);
