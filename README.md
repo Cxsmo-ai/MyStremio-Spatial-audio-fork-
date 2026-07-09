@@ -2,6 +2,8 @@
 
 [Visit the Official Repository: Cxsmo-ai/MyStremio-Spatial-audio-fork-](https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-)
 
+> **Note:** This is a fork of the original [MyStremio by AlphiiJr](https://github.com/AlphiiJr/MyStremio). Huge thanks to the original creator for the incredible foundation!
+
 **MyStremio** is a personalized Windows desktop client built on the Stremio shell stack.
 It combines UI upgrades, player improvements, plugins/themes and library tools in one installer.
 Current release: **2.2.9**
@@ -275,6 +277,8 @@ The repo includes a prebuilt `stremio-shell/stremio-shell-ng-main/webui/` bundle
 ---
 
 ## 🙏 Credits
+
+This fork is built upon the original [MyStremio by AlphiiJr](https://github.com/AlphiiJr/MyStremio).
 
 MyStremio is based on the following independent community projects:
 
