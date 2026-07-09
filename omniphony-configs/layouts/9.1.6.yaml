@@ -1,0 +1,118 @@
+# ITU-R BS.2051 9.1.6 immersive speaker layout
+#
+# Standard 9.1 bed with 6 height channels in normalized Cartesian coordinates.
+# LFE remains non-spatialized.
+# Total: 16 channels (including LFE)
+
+speakers:
+  - name: "FL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "FR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "C"
+    coord_mode: "cartesian"
+    x: 0.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "LFE"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 1.0
+    z: -0.5
+    spatialize: false
+
+  - name: "FWL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 0.5
+    z: 0.0
+    spatialize: true
+
+  - name: "FWR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 0.5
+    z: 0.0
+    spatialize: true
+
+  - name: "SL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 0.0
+    z: 0.0
+    spatialize: true
+
+  - name: "SR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 0.0
+    z: 0.0
+    spatialize: true
+
+  - name: "BL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: -1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "BR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: -1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "TFL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 1.0
+    z: 1.0
+    spatialize: true
+
+  - name: "TFR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 1.0
+    z: 1.0
+    spatialize: true
+
+  - name: "TSL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 0.0
+    z: 1.0
+    spatialize: true
+
+  - name: "TSR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 0.0
+    z: 1.0
+    spatialize: true
+
+  - name: "TBL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: -1.0
+    z: 1.0
+    spatialize: true
+
+  - name: "TBR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: -1.0
+    z: 1.0
+    spatialize: true

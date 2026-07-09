@@ -1,0 +1,60 @@
+# ITU-R style 7.1 surround speaker layout for 8-channel Windows/Voicemeeter output.
+# LFE remains direct/non-spatialized.
+
+speakers:
+  - name: "FL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "FR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "C"
+    coord_mode: "cartesian"
+    x: 0.0
+    y: 1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "LFE"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 1.0
+    z: -0.5
+    spatialize: false
+
+  - name: "SL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: 0.0
+    z: 0.0
+    spatialize: true
+
+  - name: "SR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: 0.0
+    z: 0.0
+    spatialize: true
+
+  - name: "BL"
+    coord_mode: "cartesian"
+    x: -1.0
+    y: -1.0
+    z: 0.0
+    spatialize: true
+
+  - name: "BR"
+    coord_mode: "cartesian"
+    x: 1.0
+    y: -1.0
+    z: 0.0
+    spatialize: true
+

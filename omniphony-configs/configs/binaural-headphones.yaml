@@ -1,0 +1,34 @@
+render:
+  bridge_path: harletty_bridge.dll
+  enable_vbap: true
+  speaker_layout: layouts/9.1.6.yaml
+  osc: true
+  osc_metering: true
+  osc_rx_port: 9000
+  osc_host: 127.0.0.1
+  osc_port: 9001
+  use_loudness: true
+  auto_gain: true
+  auto_gain_ceiling_db: -1.0
+  channel_render_mode: spatial
+  output_channel_mapping: by_index
+  meter_rate: 30.0
+  diag_rate: 10.0
+  ramp_mode: frame
+  binaural:
+    output_mode: binaural
+    unit_scale_m: 1.0
+    head_radius_m: 0.0875
+    hrir_source: saf
+    reflections:
+      enabled: true
+      room_width_m: 4.0
+      room_depth_m: 5.0
+      room_height_m: 2.7
+      level: 0.35
+    reverb:
+      enabled: false
+      level: 0.12
+      rt60_s: 0.35
+      predelay_ms: 20.0
+    air_absorption: true
