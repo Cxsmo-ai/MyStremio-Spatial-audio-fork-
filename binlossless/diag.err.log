@@ -1,0 +1,5 @@
+INFO:     Started server process [23516]
+INFO:     Waiting for application startup.
+DEV_MODE is enabled — upstream responses will be logged at DEBUG level
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
