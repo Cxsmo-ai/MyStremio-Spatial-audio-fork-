@@ -1,302 +1,926 @@
-# MyStremio Spatial Audio Fork
+MyStremio Spatial Audio Fork
 
-[Visit the Official Repository: Cxsmo-ai/MyStremio-Spatial-audio-fork-](https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-)
+""Version" (https://img.shields.io/badge/version-2.3.0-green.svg)" (https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-/releases)
+"Platform" (https://img.shields.io/badge/platform-Windows-blue.svg)
+"License" (https://img.shields.io/badge/license-MIT-blue.svg)
 
-> **Note:** This is a fork of the original [MyStremio by AlphiiJr](https://github.com/AlphiiJr/MyStremio). Huge thanks to the original creator for the incredible foundation!
+"Visit the official repository: Cxsmo-ai/MyStremio-Spatial-audio-fork-" (https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-)
 
-**MyStremio** is a personalized Windows desktop client built on the Stremio shell stack.
-It combines UI upgrades, player improvements, plugins/themes and library tools in one installer or portable release.
-Current release: **2.3.0**
+«Note: This project is a fork of the original "MyStremio by AlphiiJr" (https://github.com/AlphiiJr/MyStremio). Huge thanks to the original creator for providing the foundation.»
 
-> **Disclaimer:** MyStremio is an independent community project and is not affiliated with official Stremio.
----
+MyStremio Spatial Audio Fork is a personalized Windows desktop client built on the Stremio shell stack.
 
-## 📌 Table of Contents
+It combines interface upgrades, native MPV playback, themes, plugins, library tools, Discord Rich Presence, TIDAL integration, and advanced spatial-audio playback in one installer or portable release.
 
-- [📌 Table of Contents](#-table-of-contents)
-- [❤️ Support](#-support)
-- [🚀 Features](#-features)
-- [🛠️ Patch Notes](#️-patch-notes)
-- [💾 Installation](#-installation)
-  - [📂 Install paths](#-install-paths)
-   - [📋 Requirements](#-requirements)
-   - [🗑️ Uninstall](#️-uninstall)
-   - [🎬 First-time setup](#-first-time-setup)
-- [🎨 Themes and plugins (manual files)](#-themes-and-plugins-manual-files)
-- [🧑‍💻 Build from source (developers)](#-build-from-source-developers)
-- [🔒 Privacy and local data](#-privacy-and-local-data)
-- [🙏 Credits](#-credits)
-- [💬 Feedback](#-feedback)
+The spatial-audio edition includes an Omniphony MPV Atmos bridge that can intercept compatible TIDAL playback, retrieve Dolby Atmos manifests through a local Binlossless API service, and route them into the custom Omniphony MPV player.
+
+Current release: 2.3.0
+
+«Disclaimer: MyStremio is an independent community project. It is not affiliated with, sponsored by, or endorsed by official Stremio, TIDAL, Dolby, or Omniphony.»
 
 ---
 
-### ❓ How MyStremio differs from official Stremio
+📌 Table of Contents
 
--MyStremio uses MPV as the native video player
-
--Improved player tooling (hover timestamp, TheIntroDB/auto-skip options, controllable preload behavior, brightness control)
-
--Better stream organization and metadata presentation (enrichment panels and cleaner stream UI behavior)
-
--Integrated Cinebye management (manage addons, optional Cinemeta disable)
-
--Custom library groups with JSON import/export
-
--Additional power-user options such as plugin toggles and Discord Rich Presence
-
--Packaged as a ready-to-use single installer
+- "How MyStremio differs from official Stremio" (#-how-mystremio-differs-from-official-stremio)
+- "Support" (#️-support)
+- "Architecture" (#️-architecture)
+- "Features" (#-features)
+  - "Board hero home view" (#-board-hero-home-view)
+  - "Hover metadata" (#️-hover-metadata-in-catalogs)
+  - "Detail view and StreamUI" (#️-detail-view-with-metadata-and-stream-sidebar)
+  - "Cinebye Addon Manager" (#️-cinebye-addon-manager)
+  - "Favorite languages" (#-favorite-subtitle-and-audio-languages)
+  - "Quick Select" (#-quick-select-language-shortcuts)
+  - "Themes and plugins" (#️-settings-themes-and-plugins)
+  - "Preload, library backup, and Discord" (#️-settings-preload-library-backup-and-discord)
+  - "TheIntroDB submission" (#️-theintrodb-timestamp-submission)
+  - "Seek buttons" (#️-seek-buttons)
+  - "TIDAL Atmos spatial audio" (#-tidal-atmos-spatial-audio)
+- "How the TIDAL Atmos bridge works" (#️-how-the-tidal-atmos-bridge-works)
+- "Planned features" (#-planned-features)
+- "Patch notes" (#️-patch-notes)
+- "Known issues" (#-known-issues)
+- "Installation" (#-installation)
+  - "Requirements" (#-requirements)
+  - "Portable installation" (#-portable-installation)
+  - "Installer installation" (#-installer-installation)
+  - "Omniphony Studio setup" (#-omniphony-studio-setup)
+  - "TIDAL authentication" (#-tidal-authentication)
+  - "Install paths" (#-install-paths)
+  - "Uninstall" (#️-uninstall)
+- "First-time setup" (#-first-time-setup)
+- "Using TIDAL Atmos playback" (#-using-tidal-atmos-playback)
+- "TIDAL Atmos configuration" (#️-tidal-atmos-configuration)
+- "Themes and plugins" (#-themes-and-plugins-manual-files)
+- "Build from source" (#️-build-from-source-developers)
+- "Privacy and local data" (#-privacy-and-local-data)
+- "Contributing" (#-contributing)
+- "Credits" (#-credits)
+- "License" (#-license)
+- "Feedback" (#-feedback)
 
 ---
 
-### ❤️ Support
+❓ How MyStremio differs from official Stremio
 
-If you want to support my work you can leave a small tip on [ko-fi]( https://ko-fi.com/xalphiijr), I would really appreciate it! <3 
+MyStremio includes several changes and additions beyond the official Stremio desktop client:
+
+- Native playback through a custom MPV build.
+- Omniphony spatial-audio rendering and binaural headphone output.
+- TIDAL Atmos manifest routing through the included local integration.
+- Improved player tools, including hover timestamps, seek buttons, brightness control, configurable preload behavior, and skip-segment support.
+- Better stream organization and metadata presentation.
+- Integrated Cinebye addon management.
+- Custom library groups with JSON import and export.
+- Theme and plugin controls.
+- Discord Rich Presence.
+- Portable and installer-based distributions.
+- Isolated settings and user data that do not interfere with a standard Stremio installation.
 
 ---
 
-## 🏗️ Architecture
+❤️ Support
 
-MyStremio is a heavily modified, high-performance fork of the standard Stremio desktop client that completely ditches the Electron framework. 
-
-- **Rust-based WebView2 Shell (`stremio-shell-ng-main`)**: The core orchestrator. Manages the server, window, and native IPC integrations (like Discord Rich Presence).
-- **MPV Omniphony Player (`mpv-x64`)**: Delegates all media decoding to a custom `mpv` build with advanced spatial audio capabilities (`orender` engine) instead of the standard WebPlayer.
-- **Runtime JavaScript Injections (`assets/custom_*.js`)**: Instead of maintaining a bulky fork of the massive React codebase of Stremio Web, MyStremio uses a "monkey-patching" approach. It injects custom `.js` scripts into the WebView at runtime to forcefully add features (Liquid Glass, Smart Vibrance, Seek Buttons) directly into the UI.
-- **Binlossless API & Tidal Luna Plugin**: Integrates directly with TIDAL to bypass stereo downmixing, extracting perfect bitstream Atmos payloads and routing them straight into Omniphony's `orender` engine.
-- **Custom API (`custom_api/`)**: Overrides storage paths (saving to `%APPDATA%\mystremio`) to ensure isolated, stable user settings without conflicting with vanilla Stremio.
+To support the original MyStremio developer, you can leave a tip through "Ko-fi" (https://ko-fi.com/xalphiijr).
 
 ---
 
-## 🚀 Features
+🏗️ Architecture
 
-### 🏠 Board hero home view
+MyStremio is a heavily modified Windows Stremio client that uses a Rust and WebView2 shell instead of Electron.
 
-The board includes a hero section with rotating titles. The Theme is made by [Fxy6969/Stremio-Glass-Theme](https://github.com/Fxy6969/Stremio-Glass-Theme) and just slightly optimized by me.
+Rust-based WebView2 shell
 
-   <p align="center">
+The "stremio-shell-ng-main" component acts as the main application orchestrator.
+
+It manages:
+
+- The application window.
+- The local Stremio server.
+- WebView2 integration.
+- Native player communication.
+- Local settings.
+- Discord Rich Presence.
+- Application startup and update handling.
+
+Bundled local Stremio Web UI
+
+MyStremio includes a patched local Stremio Web bundle instead of depending exclusively on the public Stremio website.
+
+This allows features such as the board hero banner and MyStremio settings to be integrated directly into the React interface.
+
+Runtime JavaScript injections
+
+Additional features are provided through scripts such as:
+
+assets/custom_*.js
+
+These scripts extend or modify the Web UI at runtime to provide features such as:
+
+- Liquid Glass visual styling.
+- Smart Vibrance.
+- Seek controls.
+- Player overlays.
+- Plugin integration.
+- Metadata panels.
+- Language shortcuts.
+
+MPV Omniphony player
+
+Media decoding is delegated to a custom MPV build with Omniphony spatial-audio support.
+
+The player can route compatible audio into the "orender" engine for:
+
+- Multichannel spatial playback.
+- Binaural headphone rendering.
+- Head-tracked listening where configured.
+- Room and listener positioning.
+- Master normalization.
+- High-channel-count content handling.
+
+Omniphony Studio
+
+Omniphony Studio is the companion control application for the renderer.
+
+It provides access to settings such as:
+
+- Binaural or speaker-rendering mode.
+- Room dimensions.
+- Listener position.
+- Unit scale.
+- Master normalization.
+- OSC and renderer controls.
+
+Binlossless API and TIDAL bridge
+
+The Atmos edition includes a local Binlossless-compatible API service and a TIDAL integration plugin.
+
+Together they can:
+
+1. Identify the selected TIDAL track.
+2. Request a compatible Atmos manifest.
+3. Pass the returned stream URI to the custom MPV bundle.
+4. Synchronize playback controls between TIDAL and MPV.
+5. Fall back to normal TIDAL playback when no Atmos stream is available.
+
+Custom API and isolated storage
+
+MyStremio stores its settings separately from vanilla Stremio.
+
+The primary user-data location is:
+
+%APPDATA%\MyStremio\
+
+This prevents most MyStremio settings, plugins, and library data from conflicting with a normal Stremio installation.
+
+---
+
+🚀 Features
+
+🏠 Board hero home view
+
+The board includes a rotating hero section for featured titles.
+
+The theme is based on "Fxy6969/Stremio-Glass-Theme" (https://github.com/Fxy6969/Stremio-Glass-Theme) with additional MyStremio optimizations.
+
+<p align="center">
   <img src="./images/01-board-hero.png" alt="Board Hero Home" width="1000"/>
-</p>
+</p>🖱️ Hover metadata in catalogs
 
-### 🖱️ Hover metadata in catalogs
+While browsing catalogs, hover cards can display information such as:
 
-   While browsing catalogs, hover cards show key information (plot, genres, cast) without forcing a page change.
-   <p align="center">
+- Plot summary.
+- Genres.
+- Cast.
+- Year.
+- Additional metadata.
+
+This provides more information without requiring a full page change.
+
+<p align="center">
   <img src="./images/02-catalog-hover.png" alt="Catalog Hover Metadata" width="1000"/>
-</p>
+</p>📖 Detail view with metadata and stream sidebar
 
+The Data Enrichment plugin by MrBlu03 can enhance detail pages with cast information and similar titles when a TMDB API key is configured.
 
-### 📖 Detail view with metadata and stream sidebar
+The StreamUI plugin provides a cleaner sidebar with categorized stream folders.
 
-The Data Enrichment Plugin by MrBlu03 (if TMDB API-Key is set) offers an enhanced detail page with cast and similar titles.
-The StreamUI pluign offers a clean and modern sidebar with folders to pick streams from. (The plugin works for the follwing addons: Most torrent addons, [WatchHub](https://stremio-addons.net/addons/watchhub), [Ratings Aggregator](https://stremio-addons.net/addons/ratings-aggregator), [IMDb Ratings](https://stremio-addons.net/addons/imdb-ratings), [AfterCredits](https://aftercredits.almosteffective.com/configure.html)).
+StreamUI supports many commonly used addons, including:
 
-  <p align="center">
+- Most torrent addons.
+- "WatchHub" (https://stremio-addons.net/addons/watchhub)
+- "Ratings Aggregator" (https://stremio-addons.net/addons/ratings-aggregator)
+- "IMDb Ratings" (https://stremio-addons.net/addons/imdb-ratings)
+- "AfterCredits" (https://aftercredits.almosteffective.com/configure.html)
+
+<p align="center">
   <img src="./images/03-detail-metadata-stream-sidebar.png" alt="Metadata and Stream UI" width="1000"/>
-</p>
+</p>🎞️ Cinebye Addon Manager
 
-### 🎞️ Cinebye Addon Manager
+"Cinebye" (https://cinebye.elfhosted.com/) is integrated into MyStremio.
 
-[Cinebye](https://cinebye.elfhosted.com/) is integrated so you can manage addons inside Stremio and optionally disable specific sources (for example Cinemeta).
+It can be used to manage Stremio addons and optionally disable individual metadata sources such as Cinemeta.
 
-  <p align="center">
-  <img src="./images/04-cinebye-addon-manager.pngg" alt="Cinebye Addon Manager" width="1000"/>
-</p>
+<p align="center">
+  <img src="./images/04-cinebye-addon-manager.png" alt="Cinebye Addon Manager" width="1000"/>
+</p>🌐 Favorite subtitle and audio languages
 
-### 🌐 Favorite subtitle and audio languages
+Player settings allow you to define a preferred pool of subtitle and audio languages.
 
-Inside player settings, you can define favorite subtitle and audio languages that act as your preferred language pool.
-This preference layer is used by the quick language actions shown in the next section.
+These preferences are used by the Quick Select controls during playback.
 
-   <p align="center">
-  <img src="./images/05-favorite-languages-subtitles.png" alt="Favorite Languages for Subtitles and Audio" />
-</p>
+<p align="center">
+  <img src="./images/05-favorite-languages-subtitles.png" alt="Favorite Languages for Subtitles and Audio"/>
+</p>⚡ Quick Select language shortcuts
 
-### ⚡ Quick Select language shortcuts
+Quick Select converts your favorite language list into one-click audio and subtitle controls.
 
-Quick Select reads your favorites and exposes them as one-click subtitle/audio buttons, so switching language is fast and consistent during playback.
-In short: favorites define what is available, Quick Select is the runtime shortcut layer that applies those preferences immediately.
+Favorites determine which languages are shown, while Quick Select applies the selected language immediately during playback.
 
-   <p align="center">
-  <img src="./images/06-quick-settings.png" alt="Quick Select Language Shortcuts" />
-</p>
+<p align="center">
+  <img src="./images/06-quick-settings.png" alt="Quick Select Language Shortcuts"/>
+</p>⚙️ Settings: themes and plugins
 
-### ⚙️ Settings: themes and plugins
+Themes and plugins can be enabled or disabled from the MyStremio settings page.
 
-Themes and plugins can be managed directly from settings, including quick access to the themes/plugins folders.
+The interface also provides shortcuts for opening the local themes and plugins folders.
 
-   <p align="center">
-  <img src="./images/07-01-settings-themes-plugins.png" alt="Themes and Plugins Settings" />
-</p>
+<p align="center">
+  <img src="./images/07-01-settings-themes-plugins.png" alt="Themes and Plugins Settings"/>
+</p>⚙️ Settings: preload, library backup, and Discord
 
-### ⚙️ Settings: preload, library backup, Discord
+Under Settings → MyStremio, you can configure:
 
-Inside **Settings → MyStremio**, you get central controls for buffer/preload, library export/import, and Discord Rich Presence.
+- Stream preload and buffering behavior.
+- Library JSON import and export.
+- Discord Rich Presence.
+- Plugin API keys.
+- Favorite languages.
+- Automatic skip behavior.
+- Plugin toggles.
 
-  <p align="center">
-  <img src="./images/08-01-settings-preload-library-discord.png" alt="Preload Library Discord Settings" w/>
-</p>
+<p align="center">
+  <img src="./images/08-01-settings-preload-library-discord.png" alt="Preload Library and Discord Settings"/>
+</p>⏱️ TheIntroDB timestamp submission
 
-### ⏱️ TheIntroDB timestamp submission
+MyStremio can contribute segment timestamps to "TheIntroDB" (https://theintrodb.org/) while a video is playing.
 
-Contribute segment timestamps to TheIntroDB while watching. Open the contribute panel from the player, mark times, pick the segment type, and submit — helps improve skip data for everyone.
+The contribution panel lets you:
 
-  <p align="center">
-  <img src="./images/10-tidb-timestamp.png" alt="TheIntroDB panel" />
-</p>
+1. Mark the segment start.
+2. Mark the segment end.
+3. Choose the segment type.
+4. Submit the timestamp with your API key.
 
-### ⏩ Seek buttons
+Supported segment types include:
 
-Configurable skip-back and skip-forward controls in the player bar — useful for quick rewinds or jumping ahead without scrubbing.
+- Intro.
+- Outro.
+- Recap.
+- Preview.
 
- <p align="center">
-  <img src="./images/09-01-seek-buttons-controls.png" alt="Seek button controls" width="61%"/>
-  <img src="./images/09-seek-buttons.png" alt="Seek buttons in Player" width="60%"/>
-</p>
+<p align="center">
+  <img src="./images/10-tidb-timestamp.png" alt="TheIntroDB Timestamp Panel"/>
+</p>⏩ Seek buttons
 
-### 🎵 TIDAL Atmos Spatial Audio
+Configurable skip-back and skip-forward buttons are available in the player control bar.
 
-MyStremio now supports pure, uncompressed Dolby Atmos playback natively from TIDAL. By using the included Omniphony Tidal Luna Plugin and the Binlossless API, it intercepts standard playback and pipes the raw 9.1.6 Atmos manifest directly into the MPV Omniphony player, bypassing Windows mixer limitations.
+The seek interval can be changed under:
 
----
-### 💡 Planned Features
+Settings → MyStremio → Plugins
 
-- **IntroDB integration:** I plan on implementing both TheIntroDB and IntroDB together to get maximum coverage.
-- **PiP:** I'm working on a picture in picture video mode
-- **Seek Bar Thumbnail:** I want to add a thumbnail when hovering over the seek bar in the player.
+<p align="center">
+  <img src="./images/09-01-seek-buttons-controls.png" alt="Seek Button Controls" width="61%"/>
+  <img src="./images/09-seek-buttons.png" alt="Seek Buttons in Player" width="60%"/>
+</p>🎵 TIDAL Atmos spatial audio
 
----
+MyStremio includes an integrated version of the Omniphony MPV Atmos bridge.
 
-## 🛠️ Patch Notes
+The integration is designed to intercept compatible playback from the TIDAL desktop interface and route the Atmos stream to the external Omniphony MPV player.
 
-### 2.3.0
+Key capabilities include:
 
-- **Tidal Atmos Integration** — Packaged the Binlossless API as a local daemon that handles Tidal authentication and extracts raw Atmos manifests, piping them directly to the orender spatial engine.
-- **Portable Auth Tool** — Added uth-tidal.bat to safely authenticate user credentials locally without exposing tokens in the repository or portable zip.
-- **Portable Distribution Release** — Removed all personal caching/appdata for a clean spatial-audio-focused public release (2.3.0-atmos-portable).
+- TIDAL interface integration.
+- Dolby Atmos manifest retrieval through the local Binlossless API.
+- External MPV launching through the "omniphony://" protocol or configured launcher.
+- Omniphony "orender" spatial rendering.
+- Binaural headphone output.
+- Multichannel spatial output.
+- Pause synchronization.
+- Seek synchronization.
+- Volume synchronization.
+- Automatic fallback to regular TIDAL playback when an Atmos manifest is unavailable.
+- Local authentication and local API communication.
 
-### 2.2.9
-
-- **Board hero banner (native React)** — Featured titles are rendered directly in the board route. This required shipping a **bundled local Web UI** instead of the public Stremio website, and moving **Settings → MyStremio** into native React (autoskip, favorite languages, plugin toggles, Discord, API keys) for a stable settings experience without DOM injection.
-- **Hero loading** — Banner-area loading state instead of a Breaking Bad fallback flash; remaining fallback paths in the bundled Web UI were patched out.
-- **Startup stability** — Cold-start guard for stale `#/player` routes, opaque fallback background, and safer player loading masks so the UI no longer goes black on the 2nd/3rd launch.
-- **Dynamic Hero crash fix** — Null guards for missing hero titles (`year` / `preloadHeroImages`) so an empty hero cache no longer crashes React.
-- **WebView2 cache handling** — Browsing cache is refreshed on version/Web UI changes without wiping the full profile; service worker registration is blocked in the desktop shell to avoid stale bundles.
-- **Settings persistence** — Login, plugins, volume, autoskip, Discord, preload, language, library, and onboarding flags are restored from `%APPDATA%\MyStremio\mystremio-settings.json` before `main.js` loads, so restarts and updates no longer reset user configuration.
-- **Stream buffering and player loading** — Reworked playback startup and buffering: configurable preload, and a more stable hand-off when a stream starts loading.
-- **TheIntroDB timestamp submission** — Submit intro, outro, recap, and preview timestamps to [TheIntroDB](https://theintrodb.org/) from the player (mark start/end, pick segment type, submit with your API key).
-- **Seek buttons** — Skip backward and forward from the player control bar with a configurable interval (Settings → MyStremio → Plugins).
-- **In-app updater** — Checks GitHub Releases for `MyStremioSetup-v*_x64.exe`, verifies `SHA256SUMS.txt`, and installs updates via the existing Stremio update banner (still in testing).
-- **Player brightness** — Brightness control in the left player bar with MPV tone adjustment, draggable slider, and compact popup UI.
-- **Board scroll** — Fixed rubberbanding on the first scroll after app start; scroll position restore only runs when returning from detail/player within the same session.
-- **Plugin and player adjustments** — Updates to stream UI, TheIntroDB skip logic, continue-watching covers, metadata hover panels, and data enrichment mount targeting.
-- **Player shell assets** — Updated player loading overlay, glass-style controls, playback API integration, and seek-buffer handling.
-- **Custom board scrollbar** — Always-visible scrollbar on the board and other main catalog views, alongside mouse-wheel scrolling.
-- **Scroll behavior in panels and menus** — Plugin dropdown menu, metadata hover panels, and library context menus behavior fixed.
-- **Navigation during tab switches** — The horizontal navigation bar stays in place while routes load, without jumping or briefly disappearing.
-- **Meta Hover Panel** — Removed duplicated year display.
-- **Plugin live updates** — Partially added live updates when plugins are toggled.
-- **Artifacts** — Fixed artifacts appearing in the subtitle settings and shortcuts section.
-- **StreamUI** — Added Usenet grouping to StreamUI plugin (still in testing). Fixed UI language.
+«Atmos availability depends on the selected TIDAL track, account access, regional availability, API compatibility, and the currently installed TIDAL client version.»
 
 ---
 
-### Known Issues
+⚙️ How the TIDAL Atmos bridge works
 
-- **First stream playback:** On the first stream start after launching the app, the video may remain frozen on the first frame. One click into the seek bar fixes the issue.
-- **Windows display scaling:** UI scaling issues may occur when Windows display scaling is set to anything other than **100%**.
-- **Cast Search Addon:** The Cast Search Addon is not compatible with the StreamUI plugin as the cast members load the same way as video streams which messes with correct grouping.
-- **Formatter:** Flags don't display correctly.
+The bridge connects the TIDAL user interface to an external custom MPV instance.
+
+1. Playback detection
+
+The TIDAL plugin monitors the application’s playback state and media elements.
+
+When a new track begins, it attempts to determine the current TIDAL track ID through available application state or page metadata.
+
+2. Native playback suppression
+
+When a compatible Atmos stream is found, the plugin suppresses or mutes native TIDAL playback to prevent both the TIDAL client and MPV from producing audio simultaneously.
+
+3. Manifest request
+
+The plugin sends the track ID to the local API endpoint.
+
+A typical endpoint looks like:
+
+http://127.0.0.1:8000/trackManifests/?id=TRACK_ID
+
+The local service requests the available playback manifest and returns a usable stream URI when an Atmos version is available.
+
+4. External MPV launch
+
+The returned stream is passed to the Omniphony-enabled MPV bundle.
+
+Depending on the configured release, this may be done through:
+
+- The registered "omniphony://" Windows protocol.
+- A local launcher.
+- The included portable startup scripts.
+- Direct process creation from the MyStremio shell.
+
+5. Spatial rendering
+
+MPV decodes the incoming stream and routes its audio into the Omniphony "orender" engine.
+
+Omniphony Studio can then control the final rendering mode and spatial configuration.
+
+6. Playback synchronization
+
+The plugin forwards supported controls from the TIDAL interface to MPV through local IPC.
+
+This includes:
+
+- Play.
+- Pause.
+- Seek.
+- Volume changes.
+- Track changes.
+
+7. Stereo fallback
+
+When no compatible Atmos manifest is returned, MyStremio allows the TIDAL client to continue with its standard playback path.
+
+This prevents non-Atmos tracks from becoming unplayable.
 
 ---
 
-## 💾 Installation
+💡 Planned Features
 
-1. Download the latest `MyStremio-portable-atmos-release.zip` or installer from this repository's **Releases** page: [Cxsmo-ai/MyStremio-Spatial-audio-fork-/releases](https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-/releases)
-2. Extract the ZIP to your desired portable location (or run the installer).
-3. **Omniphony Studio (REQUIRED):** You MUST also download the Windows **Omniphony Studio Installer** from the official Omniphony releases page (make sure to grab the latest stable release, not a beta): [mgth/Omniphony/releases/latest](https://github.com/mgth/Omniphony/releases/latest)
-   - **Why it's needed:** MyStremio completely replaces the default audio player with a custom spatial audio engine (`orender`). Omniphony Studio is the companion GUI required to actually control this engine. Without it, you cannot switch between spatial 7.1.4 and binaural headphone modes, and you cannot adjust crucial settings like your room size, unit scale, and master normalization volume.
-4. **Tidal Atmos Auth:** If using the portable Atmos release, run `auth-tidal.bat` in the extracted folder to securely log in to your TIDAL account to enable spatial audio.
-5. Launch MyStremio via `mystremio-shell.exe` or `start-mystremio-portable.bat`.
-
-
-### 📂 Install paths
-
-- App: `%LOCALAPPDATA%\Programs\MyStremio\`
-- User data (settings/addons): `%APPDATA%\MyStremio\`
-
-### 📋 Requirements
-
-- Windows 10/11 (64-bit)
-- Internet connection (addons, metadata sources, streaming)
-- Optional API keys for plugins (for example TMDB, TheIntroDB)
-
-### 🗑️ Uninstall
-
-Use **Windows Apps & Features** or the Start menu uninstaller.
-Optionally delete `%APPDATA%\MyStremio\` to remove all local user data.
+- Combined TheIntroDB and IntroDB integration for greater segment coverage.
+- Picture-in-picture video mode.
+- Seek-bar thumbnail previews.
+- Additional TIDAL and MPV synchronization improvements.
+- Improved automatic recovery if the external player closes unexpectedly.
+- More portable path detection for the MPV bundle.
+- Expanded renderer configuration from inside MyStremio.
 
 ---
 
-## 🎬 First-time setup
+🛠️ Patch Notes
 
-1. Install and launch MyStremio.
-2. Sign in with your Stremio account.
-3. Open **Settings → MyStremio** and configure optional items:
-   - Preload/buffer
-   - Themes/plugins
-   - Discord Rich Presence
-   - Plugin API keys (TheIntroDB for timestamp submission)
-4. Create library folders and use JSON import/export when needed.
+2.3.0
+
+- TIDAL Atmos integration — Added the local Binlossless API daemon and TIDAL playback bridge for retrieving compatible Atmos manifests and routing them into the Omniphony MPV player.
+- Omniphony player integration — Added an external custom MPV playback path using the Omniphony "orender" spatial-audio engine.
+- Playback synchronization — Added local synchronization for play, pause, seek, volume, and track changes between the TIDAL interface and MPV.
+- Stereo fallback — TIDAL continues through its standard playback path when an Atmos manifest is unavailable.
+- Portable authentication tool — Added "auth-tidal.bat" for local TIDAL authentication without including personal tokens in the repository or release archive.
+- Local API packaging — Packaged the Binlossless-compatible API service as a local executable for the portable release.
+- Portable distribution cleanup — Removed personal application data, credentials, tokens, and cached files from the public portable archive.
+- Spatial-audio portable release — Added the "v2.3.0-atmos-portable" distribution.
+
+2.2.9
+
+- Board hero banner — Featured titles are rendered directly in the board route.
+- Bundled Web UI — Added a bundled local Web UI instead of relying only on the public Stremio website.
+- Native MyStremio settings — Moved MyStremio settings into the React interface for improved stability.
+- Hero loading — Added a banner-area loading state and removed remaining fallback flashes.
+- Startup stability — Added protection against stale player routes and repeated-launch black screens.
+- Dynamic hero crash fix — Added null guards for missing hero metadata.
+- WebView2 cache handling — Refreshes relevant browsing cache after version or Web UI changes without wiping the entire profile.
+- Service worker handling — Blocks service-worker registration in the desktop shell to reduce stale-bundle problems.
+- Settings persistence — Restores login, plugins, volume, autoskip, Discord, preload, language, library, and onboarding settings before the Web UI loads.
+- Stream buffering — Reworked configurable preload and playback startup behavior.
+- TheIntroDB submission — Added timestamp submission for intros, outros, recaps, and previews.
+- Seek buttons — Added configurable backward and forward seek controls.
+- In-app updater — Added GitHub release checks and SHA-256 verification for installer updates.
+- Player brightness — Added an MPV-backed brightness control.
+- Board scrolling — Fixed first-scroll rubber-banding and improved position restoration.
+- Plugin and player adjustments — Updated StreamUI, skip logic, continue-watching covers, metadata panels, and enrichment mounting.
+- Player shell assets — Updated loading overlays, controls, playback API integration, and buffer handling.
+- Custom board scrollbar — Added an always-visible scrollbar to catalog views.
+- Panel scrolling — Fixed scrolling in plugin menus, metadata panels, and library context menus.
+- Navigation stability — Prevented the navigation bar from jumping or disappearing during route changes.
+- Meta Hover Panel — Removed duplicated year information.
+- Plugin live updates — Added partial support for applying plugin toggle changes without restarting.
+- Visual fixes — Removed artifacts from subtitle settings and shortcut controls.
+- StreamUI — Added experimental Usenet grouping and corrected interface language.
 
 ---
 
-## 🎨 Themes and plugins (manual files)
+⚠️ Known Issues
 
-1. Open **Settings → MyStremio**.
-2. Click **Open themes/plugins folder**.
-3. Place your theme/plugin files in that folder.
-4. Toggle the switch and press CTRL+R to reload the app.
+- First stream playback: The first stream started after launching MyStremio may remain frozen on its first frame. Clicking once on the seek bar usually resumes normal playback.
+- Windows display scaling: Interface scaling problems may occur when Windows display scaling is not set to 100%.
+- Cast Search Addon: Cast Search is not currently compatible with StreamUI because cast entries are exposed similarly to video streams, interfering with grouping.
+- Formatter flags: Some language or formatter flags may not display correctly.
+- TIDAL client updates: Changes to the TIDAL desktop interface or internal application state may temporarily break track detection or playback interception.
+- Playback synchronization: Very rapid seeking or repeated track changes may briefly desynchronize TIDAL and the external MPV player.
+- External MPV window: Closing MPV manually may not immediately restore native TIDAL audio in every case.
+- Path handling: Older builds may expect the Omniphony MPV bundle at a fixed location unless its path is changed in the plugin configuration.
+- Atmos availability: Not every TIDAL track or release has an Atmos manifest.
+- Omniphony dependency: Spatial and binaural controls require Omniphony Studio to be installed and running correctly.
 
 ---
 
-## 🧑‍💻 Build from source (developers)
+💾 Installation
 
-Requires Rust (MSVC), Visual Studio Build Tools, Inno Setup 6, Node.js with pnpm (optional, for Web UI rebuild), and an installed Stremio Desktop runtime (for `libmpv-2.dll`).
+Download the latest release from:
 
-```powershell
+"MyStremio Spatial Audio Fork releases" (https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-/releases)
+
+The repository may provide:
+
+- A portable Atmos ZIP.
+- A Windows installer.
+- Checksums or release metadata.
+- Separate development builds.
+
+📋 Requirements
+
+- Windows 10 or Windows 11, 64-bit.
+- Microsoft WebView2 Runtime.
+- Internet access for addons, metadata, streaming, authentication, and API requests.
+- Omniphony Studio for spatial and binaural renderer control.
+- A TIDAL desktop installation and compatible account when using TIDAL integration.
+- Optional plugin API keys, such as TMDB or TheIntroDB.
+- A compatible audio output device.
+- Headphones for binaural playback or a suitable multichannel device for speaker rendering.
+
+📦 Portable installation
+
+1. Download the latest portable Atmos archive:
+   
+   MyStremio-portable-atmos-release.zip
+
+2. Extract it to a permanent folder.
+   
+   Avoid placing the application inside a temporary directory.
+
+3. Install Omniphony Studio using the instructions below.
+
+4. Run:
+   
+   auth-tidal.bat
+   
+   This is only required for TIDAL integration.
+
+5. Launch MyStremio using either:
+   
+   mystremio-shell.exe
+   
+   or:
+   
+   start-mystremio-portable.bat
+
+🪟 Installer installation
+
+1. Download the latest x64 installer from the Releases page.
+2. Run the installer.
+3. Complete the normal Windows setup process.
+4. Install Omniphony Studio separately.
+5. Launch MyStremio from the Start menu or desktop shortcut.
+6. Run the TIDAL authentication tool if you intend to use the Atmos integration.
+
+🎧 Omniphony Studio setup
+
+Omniphony Studio is required to control the custom spatial-audio renderer.
+
+Download the latest stable Windows installer from:
+
+"mgth/Omniphony releases" (https://github.com/mgth/Omniphony/releases/latest)
+
+Use the latest stable release rather than a beta unless the MyStremio release notes specifically request a beta version.
+
+Omniphony Studio is needed because the custom MPV player sends audio into the "orender" engine. The Studio interface controls how that audio is rendered.
+
+Without Omniphony Studio, you may be unable to:
+
+- Change between binaural and spatial speaker output.
+- Select or configure the output device.
+- Adjust room dimensions.
+- Change the listener position.
+- Configure unit scale.
+- Control master normalization.
+- Configure tracking or OSC options.
+- Diagnose renderer connection problems.
+
+After installation:
+
+1. Launch Omniphony Studio.
+2. Confirm that the renderer starts successfully.
+3. Select the required output mode.
+4. For headphones, enable the appropriate binaural rendering mode.
+5. Start MyStremio and play compatible content.
+6. Verify that the renderer receives audio.
+
+🔐 TIDAL authentication
+
+The portable Atmos release includes:
+
+auth-tidal.bat
+
+Run this tool before attempting TIDAL Atmos playback.
+
+The authentication process is intended to:
+
+- Authenticate locally.
+- Create the required local session or token data.
+- Avoid storing personal credentials in the public repository.
+- Avoid including a developer’s personal cache in the portable archive.
+
+Do not upload or publicly share generated authentication files, cookies, session data, or tokens.
+
+📂 Install paths
+
+Default installer application directory:
+
+%LOCALAPPDATA%\Programs\MyStremio\
+
+Primary MyStremio user-data directory:
+
+%APPDATA%\MyStremio\
+
+TIDAL desktop application commonly installs to:
+
+%LOCALAPPDATA%\TIDAL\TIDAL.exe
+
+The exact portable application and MPV paths depend on where the archive is extracted.
+
+🗑️ Uninstall
+
+For the installer edition:
+
+1. Open Windows Apps & Features.
+2. Locate MyStremio.
+3. Select Uninstall.
+
+You can optionally delete the following folder to remove local settings, addon data, and library configuration:
+
+%APPDATA%\MyStremio\
+
+For the portable edition:
+
+1. Close MyStremio, MPV, the local API server, and related scripts.
+2. Delete the extracted portable folder.
+3. Delete "%APPDATA%\MyStremio\" only when you also want to remove your settings.
+4. Remove the custom "omniphony://" protocol registration if it was installed separately and is no longer needed.
+
+---
+
+🎬 First-time setup
+
+1. Install or extract MyStremio.
+
+2. Install and launch Omniphony Studio.
+
+3. Launch MyStremio.
+
+4. Sign in with your Stremio account.
+
+5. Open:
+   
+   Settings → MyStremio
+
+6. Configure the desired options:
+   
+   - Preload and buffering.
+   - Themes and plugins.
+   - Favorite audio languages.
+   - Favorite subtitle languages.
+   - Discord Rich Presence.
+   - TheIntroDB API key.
+   - Automatic skip behavior.
+   - Library groups.
+   - Plugin-specific API keys.
+
+7. Create or import custom library folders if required.
+
+8. Test normal video playback.
+
+9. Select the required output mode in Omniphony Studio.
+
+10. Run "auth-tidal.bat" before using the TIDAL Atmos bridge.
+
+---
+
+🎵 Using TIDAL Atmos playback
+
+Depending on the release layout, the TIDAL integration may be started from MyStremio or through an included launcher script.
+
+A typical standalone plugin layout looks like:
+
+omniphony-tidal-luna-plugin/
+├── api/
+│   └── hifi-api-server.exe
+├── Start-Tidal-Atmos.bat
+├── auth-tidal.bat
+├── omniphony.json
+├── omniphony.mjs
+└── store.json
+
+The packaged MyStremio edition may place these files in a different internal directory.
+
+Startup procedure
+
+1. Launch Omniphony Studio.
+
+2. Run "auth-tidal.bat" if authentication has not been completed.
+
+3. Start MyStremio or run:
+   
+   Start-Tidal-Atmos.bat
+
+4. The startup process checks whether the local API server is running.
+
+5. If necessary, it starts the server silently.
+
+6. It then launches or connects to the TIDAL desktop client.
+
+7. Play a Dolby Atmos track in TIDAL.
+
+8. When a compatible manifest is found, the external Omniphony MPV player opens and handles playback.
+
+9. Use the TIDAL interface for supported play, pause, volume, and seek controls.
+
+10. Use Omniphony Studio to control the spatial or binaural rendering mode.
+
+Normal fallback behavior
+
+When a track does not have a usable Atmos manifest:
+
+- External MPV should not take over playback.
+- Native TIDAL playback should remain available.
+- The track may play in stereo or another format provided by the normal TIDAL client.
+
+---
+
+🛠️ TIDAL Atmos configuration
+
+The main integration settings are located near the top of "omniphony.mjs" or in the packaged configuration file.
+
+A typical configuration is:
+
+const CONFIG = {
+    BINLOSSLESS_API: 'http://127.0.0.1:8000/trackManifests/?id=',
+    MPV_EXECUTABLE: 'd:\\Apps\\omniphony-libmpv-bundle\\mpv.exe'
+};
+
+API address
+
+The default local endpoint is:
+
+http://127.0.0.1:8000/
+
+If the local service uses a different port, update "BINLOSSLESS_API".
+
+Keep the service bound to the loopback interface unless remote access is intentionally required.
+
+Recommended:
+
+127.0.0.1
+
+Not recommended for normal local use:
+
+0.0.0.0
+
+MPV executable path
+
+Set "MPV_EXECUTABLE" to the actual location of the Omniphony-enabled "mpv.exe".
+
+Example:
+
+MPV_EXECUTABLE: 'd:\\Apps\\omniphony-libmpv-bundle\\mpv.exe'
+
+JavaScript strings require escaped backslashes.
+
+Correct:
+
+'d:\\Apps\\omniphony-libmpv-bundle\\mpv.exe'
+
+Incorrect:
+
+'d:\Apps\omniphony-libmpv-bundle\mpv.exe'
+
+Custom protocol
+
+Some distributions use:
+
+omniphony://
+
+The Windows registry protocol handler must point to the included launcher or Omniphony MPV executable.
+
+The protocol lets the TIDAL plugin trigger external playback without requiring the application sandbox to launch arbitrary executables directly.
+
+IPC
+
+Playback synchronization relies on a local IPC connection between the integration and MPV.
+
+The exact IPC transport may vary between releases, but it can be used to send commands such as:
+
+{"command":["set_property","pause",true]}
+
+{"command":["set_property","time-pos",120]}
+
+{"command":["set_property","volume",75]}
+
+Do not expose the IPC socket or pipe to untrusted remote systems.
+
+---
+
+🎨 Themes and plugins: manual files
+
+1. Open MyStremio.
+
+2. Navigate to:
+   
+   Settings → MyStremio
+
+3. Select Open themes/plugins folder.
+
+4. Place the theme or plugin files in the appropriate directory.
+
+5. Enable the corresponding toggle.
+
+6. Press:
+   
+   Ctrl+R
+   
+   to reload the interface when necessary.
+
+Only install scripts and plugins from sources you trust. Runtime plugins may be able to access application state or alter playback behavior.
+
+---
+
+🧑‍💻 Build from source: developers
+
+Requirements
+
+- Rust using the MSVC toolchain.
+- Visual Studio Build Tools.
+- Inno Setup 6.
+- Node.js.
+- pnpm when rebuilding the Web UI.
+- Microsoft WebView2 Runtime.
+- A compatible MPV or libmpv runtime.
+- Any required Omniphony development components.
+- Git.
+- PowerShell.
+
+Build the release
+
 cd stremio-shell\stremio-shell-ng-main
 .\package-release.ps1
-```
 
-Output: `release\MyStremioSetup-v2.2.9_x64.exe`
+Expected output for the current release should follow the format:
 
-The repo includes a prebuilt `stremio-shell/stremio-shell-ng-main/webui/` bundle. To rebuild the Web UI from source, clone [stremio-web](https://github.com/Stremio/stremio-web) into `.tmp/stremio-web`, apply MyStremio patches, then run the build script again.
+release\MyStremioSetup-v2.3.0_x64.exe
+
+Rebuild the Web UI
+
+The repository contains a prebuilt Web UI bundle at:
+
+stremio-shell\stremio-shell-ng-main\webui\
+
+To rebuild it:
+
+1. Clone "stremio-web" (https://github.com/Stremio/stremio-web) into:
+   
+   .tmp\stremio-web
+
+2. Apply the MyStremio patches.
+
+3. Install dependencies using pnpm.
+
+4. Build the Web UI.
+
+5. Run the MyStremio packaging script again.
+
+TIDAL plugin development
+
+The integration plugin may be loaded through Tidal-Luna or another compatible Neptune plugin loader.
+
+The plugin is responsible for:
+
+- Detecting playback.
+- Obtaining the track ID.
+- Querying the local manifest API.
+- Muting or restoring native TIDAL playback.
+- Launching the external MPV player.
+- Synchronizing control state.
+- Falling back safely when Atmos is unavailable.
+
+Changes to TIDAL’s Web UI or internal state may require the detection logic to be updated.
 
 ---
-## 🔒 Privacy and local data
 
-- No API keys or personal settings are prefilled in the installer.
-- Settings, addon data, and library structure are stored locally in `%APPDATA%\MyStremio\`.
-- Cinebye login uses your Stremio session at runtime — no credentials are stored in the repository.
-- Discord Rich Presence only sends data when enabled and connected.
+🔒 Privacy and local data
 
----
-
-## 🙏 Credits
-
-This fork is built upon the original [MyStremio by AlphiiJr](https://github.com/AlphiiJr/MyStremio).
-
-MyStremio is based on the following independent community projects:
-
-- [REVENGE977/stremio-enhanced](https://github.com/REVENGE977/stremio-enhanced)
-- [Fxy6969/Stremio-Glass-Theme](https://github.com/Fxy6969/Stremio-Glass-Theme)
-- [Bo0ii/StreamGo](https://github.com/Bo0ii/StreamGo)
-- [TheIntroDB](https://theintrodb.org/)
-
-These projects were important inspiration, and I used many of their features for my own custom build.
+- No personal API keys should be included in public installers or portable archives.
+- No personal TIDAL authentication tokens should be committed to the repository.
+- MyStremio settings are stored locally under "%APPDATA%\MyStremio\".
+- Addon data and custom library configuration are stored locally.
+- TIDAL authentication data is generated locally.
+- The Binlossless API service normally communicates over the local loopback interface.
+- Cinebye uses the active Stremio session at runtime.
+- Discord Rich Presence only sends playback activity when the feature is enabled and Discord is connected.
+- Deleting "%APPDATA%\MyStremio\" removes local MyStremio configuration but may also remove settings you intended to preserve.
+- Users should review third-party plugins before installing them.
 
 ---
 
-## 💬 Feedback
+🤝 Contributing
 
-This started as a fun personal project and is improved iteratively.
-If you find reproducible bugs or have ideas, please share feedback or open an issue.
+Contributions, bug reports, fixes, and feature requests are welcome.
+
+Useful contributions include:
+
+- Reproducible bug reports.
+- TIDAL compatibility fixes.
+- MPV or IPC synchronization improvements.
+- Portable path detection.
+- Installer improvements.
+- Renderer integration fixes.
+- Plugin compatibility updates.
+- Interface refinements.
+- Documentation corrections.
+
+When reporting a problem, include:
+
+- MyStremio version.
+- Windows version.
+- TIDAL client version when relevant.
+- Omniphony version.
+- Whether the portable or installer edition is being used.
+- Relevant logs.
+- Reproduction steps.
+- Whether normal MPV playback works.
+- Whether native TIDAL fallback works.
+- Whether Omniphony Studio receives audio.
+
+Do not include passwords, cookies, access tokens, session files, or private API credentials in an issue.
+
+---
+
+🙏 Credits
+
+This project is based on the original "MyStremio by AlphiiJr" (https://github.com/AlphiiJr/MyStremio).
+
+MyStremio also builds on or takes inspiration from the following independent community projects:
+
+- "REVENGE977/stremio-enhanced" (https://github.com/REVENGE977/stremio-enhanced)
+- "Fxy6969/Stremio-Glass-Theme" (https://github.com/Fxy6969/Stremio-Glass-Theme)
+- "Bo0ii/StreamGo" (https://github.com/Bo0ii/StreamGo)
+- "TheIntroDB" (https://theintrodb.org/)
+- "mgth/Omniphony" (https://github.com/mgth/Omniphony)
+- The Omniphony MPV integration and "orender" ecosystem.
+- Tidal-Luna and compatible Neptune plugin-loading projects.
+- Binlossless-compatible TIDAL API projects.
+- MPV and libmpv.
+- The Stremio desktop, shell, and Web UI projects.
+
+These projects provided important foundations, tools, research, and inspiration for this custom build.
+
+All trademarks and product names belong to their respective owners.
+
+---
+
+📄 License
+
+This project is distributed under the "MIT License" (LICENSE), except for bundled or referenced third-party components that remain subject to their own licenses.
+
+Review the licenses of all third-party binaries and projects before redistributing a modified package.
+
+---
+
+💬 Feedback
+
+MyStremio began as a personal project and continues to be improved iteratively.
+
+For reproducible bugs, compatibility reports, or feature suggestions, open an issue in the repository:
+
+"MyStremio Spatial Audio Fork issues" (https://github.com/Cxsmo-ai/MyStremio-Spatial-audio-fork-/issues)
