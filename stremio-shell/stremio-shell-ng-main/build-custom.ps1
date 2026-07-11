@@ -159,6 +159,7 @@ $VcVars = Get-VcVarsBat
 $TargetDir = Join-Path $ProjectRoot "target"
 
 & (Join-Path $ProjectRoot "scripts\build-webui.ps1")
+& (Join-Path $ProjectRoot "scripts\patch-internal-stream-player.ps1") -MainJs (Join-Path $ProjectRoot "webui\eb5752673c6ac87e7137a6c3cca21a6980028cf9\scripts\main.js")
 
 $BuildCmd = @(
     "call `"$VcVars`"",

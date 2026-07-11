@@ -95,28 +95,4 @@
   disableServiceWorker();
   installCrashRecovery();
   window.__MYSTREMIO_REACT_HERO__ = true;
-
-  // MPV Stats Overlay Shortcut (Ctrl+I)
-  let mpvMsgId = 20000;
-  window.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key.toLowerCase() === 'i') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!window.chrome?.webview?.postMessage) return;
-      
-      try {
-        mpvMsgId++;
-        window.chrome.webview.postMessage(JSON.stringify({
-          id: mpvMsgId,
-          args: ['mpv-command', ['script-binding', 'stats/display-stats-toggle']]
-        }));
-        
-        mpvMsgId++;
-        window.chrome.webview.postMessage(JSON.stringify({
-          id: mpvMsgId,
-          args: ['mpv-command', ['show-text', 'Decoder: ${ad} | Input: ${audio-codec-name} ${audio-params/channel-count}ch | Mode: ${ad-orender-channel-render-mode}', '5000']]
-        }));
-      } catch (err) {}
-    }
-  }, true);
 })();

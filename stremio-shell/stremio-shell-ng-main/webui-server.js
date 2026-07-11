@@ -70,8 +70,24 @@ function sendFile(res, filePath) {
       res.end('Not found');
       return;
     }
+    if (path.basename(filePath).toLowerCase() === 'index.html') {
+      const html = data.toString('utf8');
+      const injection = '<script id="mystremio-tidal-server-injection" src="mystremio-tidal-tab.js?v=20260709-4"><' + '/script>';
+      const withTidal = process.env.MYSTREMIO_DISABLE_TIDAL !== '1';
+      const disableTidal = withTidal ? '' : '<script>window.__MYSTREMIO_DISABLE_TIDAL__=true;</script>';
+      data = Buffer.from(
+        (withTidal && !html.includes('mystremio-tidal-server-injection')
+          ? html.replace('</body>', `${injection}</body>`)
+          : html).replace('<head>', `<head>${disableTidal}`),
+        'utf8'
+      );
+    }
     res.statusCode = 200;
     res.setHeader('Content-Type', contentType(filePath));
+    if (/\.(html|js|css)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+    }
     res.end(data);
   });
 }

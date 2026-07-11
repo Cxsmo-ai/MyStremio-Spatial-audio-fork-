@@ -144,9 +144,14 @@
     );
     buttons.forEach((button) => {
       if (!(button instanceof HTMLElement)) return;
-      button.setAttribute('title', label);
-      button.setAttribute('aria-label', label);
-      button.dataset.fullscreenState = isActive ? 'on' : 'off';
+      // This function also runs from a MutationObserver. Avoid writing the
+      // same attribute value back on every observer pass: WebView2 reports
+      // those writes as new mutations, which can create an endless loop as
+      // soon as the player control bar mounts.
+      if (button.getAttribute('title') !== label) button.setAttribute('title', label);
+      if (button.getAttribute('aria-label') !== label) button.setAttribute('aria-label', label);
+      const state = isActive ? 'on' : 'off';
+      if (button.dataset.fullscreenState !== state) button.dataset.fullscreenState = state;
     });
   }
 
@@ -233,8 +238,6 @@
       fullscreenObserver.observe(document.body || document.documentElement, {
         childList: true,
         subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'title', 'aria-label'],
       });
     }
   }

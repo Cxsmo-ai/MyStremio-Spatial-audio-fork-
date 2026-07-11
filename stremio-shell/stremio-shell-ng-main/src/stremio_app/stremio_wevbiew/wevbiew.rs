@@ -83,11 +83,20 @@ impl PartialUi for WebView {
         let controller_clone = data.controller.clone();
         let endpoint = data.endpoint.clone();
         let dev_tools = data.dev_tools.clone();
-        let webview_flags = concat!(
+        // Keep remote inspection opt-in and loopback-only.  It lets the portable
+        // test launcher exercise actual Stremio source links in the embedded
+        // WebView instead of relying on screen-coordinate automation.
+        let mut webview_flags = String::from(concat!(
             "--autoplay-policy=no-user-gesture-required ",
             "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,",
             "OverlayScrollbar,msOverlayScrollbarWinStyle,msOverlayScrollbarWinStyleAnimation"
-        );
+        ));
+        if let Ok(port) = std::env::var("MYSTREMIO_WEBVIEW_DEBUG_PORT") {
+            if port.parse::<u16>().is_ok() {
+                webview_flags.push_str(" --remote-debugging-address=127.0.0.1 --remote-debugging-port=");
+                webview_flags.push_str(&port);
+            }
+        }
         const CINEBYE_AUTO_LOGIN_SCRIPT: &str = r#"
 (function () {
   try {
@@ -120,7 +129,7 @@ impl PartialUi for WebView {
 "#;
         let user_data_folder = webview_user_data_dir();
         let result = webview2::EnvironmentBuilder::new()
-            .with_additional_browser_arguments(webview_flags)
+            .with_additional_browser_arguments(&webview_flags)
             .with_user_data_folder(&user_data_folder)
             .build(move |env| {
                 let env = env.expect("Cannot obtain webview environment");

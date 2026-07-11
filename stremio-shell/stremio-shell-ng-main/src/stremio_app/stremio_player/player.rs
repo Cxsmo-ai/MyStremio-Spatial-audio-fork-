@@ -17,11 +17,6 @@ use crate::stremio_app::stremio_player::{
     PlayerResponse, PropKey, PropVal,
 };
 
-struct ObserveProperty {
-    name: String,
-    format: Format,
-}
-
 #[derive(Default)]
 pub struct Player {
     pub channel: ipc::Channel,
@@ -43,17 +38,15 @@ impl PartialUi for Player {
 
         let (in_msg_sender, in_msg_receiver) = flume::unbounded();
         let (rpc_response_sender, rpc_response_receiver) = flume::unbounded();
-        let (observe_property_sender, observe_property_receiver) = flume::unbounded();
         data.channel = ipc::Channel::new(Some((in_msg_sender, rpc_response_receiver)));
 
         let mpv = create_shareable_mpv(window_handle);
 
         let _event_thread = create_event_thread(
-            Arc::clone(&mpv),
-            observe_property_receiver,
+            mpv,
+            in_msg_receiver,
             rpc_response_sender,
         );
-        let _message_thread = create_message_thread(mpv, observe_property_sender, in_msg_receiver);
         // @TODO implement a mechanism to stop threads on `Player` drop if needed
 
         Ok(())
@@ -100,12 +93,21 @@ fn create_shareable_mpv(window_handle: HWND) -> Arc<Mpv> {
         set_property!("demuxer-readahead-secs", "12");
         set_property!("demuxer-max-bytes", "200MiB");
         set_property!("cache-pause-initial", "no");
+        // TIDAL DASH segments can arrive in short bursts. Keep a larger
+        // audio cushion and fill brief network timing gaps instead of
+        // producing audible dropouts.
+        set_property!("audio-buffer", "0.5");
+        set_property!("audio-stream-silence", "yes");
+        set_property!("network-timeout", "30");
         set_property!("vo", "gpu-next,");
         set_property!("gpu-api", "vulkan");
         set_optional_property!("ad", "orender,lavc,");
         set_optional_property!("ad-orender-osc", "yes");
         set_optional_property!("ad-orender-osc-rx-port", 9000i64);
-        set_optional_property!("ad-orender-osc-port", 9000i64);
+        // 9000 is the renderer's incoming control/rendezvous port. Leave
+        // outgoing monitoring automatic so Studio can own its receive socket;
+        // forcing both directions to 9000 prevents the Studio handshake.
+        set_optional_property!("ad-orender-osc-port", 0i64);
         set_optional_property!("ad-orender-osc-bind", "127.0.0.1");
         set_optional_property!("ad-orender-osc-monitor-target", "127.0.0.1");
         if let Some(orender_library) = omniphony.orender_library.as_deref() {
@@ -237,9 +239,95 @@ fn apply_loadfile_profile(cmd: &CmdVal, mpv: &Mpv) {
     }
 }
 
+fn set_mpv_property(name: impl ToString, value: impl SetData, mpv: &Mpv) {
+    if let Err(error) = mpv.set_property(&name.to_string(), value) {
+        eprintln!("cannot set MPV property: '{error:#}'")
+    }
+}
+
+fn send_mpv_command(cmd: &CmdVal, mpv: &Mpv) {
+    if cmd_is_loadfile(cmd) {
+        apply_stored_player_volume(mpv);
+        apply_loadfile_profile(cmd, mpv);
+    }
+
+    // libmpv2's command wrapper passes a command string internally. The
+    // player URLs are already percent-encoded by Stremio, so add no extra
+    // quote characters here: they become part of the URL.
+    let result = match cmd {
+        CmdVal::Quintuple(name, arg1, arg2, arg3, arg4) => mpv.command(
+            &name.to_string(),
+            &[arg1.as_ref(), arg2.as_ref(), arg3.as_ref(), arg4.as_ref()],
+        ),
+        CmdVal::Quadruple(name, arg1, arg2, arg3) => {
+            mpv.command(&name.to_string(), &[arg1.as_ref(), arg2.as_ref(), arg3.as_ref()])
+        }
+        CmdVal::Tripple(name, arg1, arg2) => {
+            mpv.command(&name.to_string(), &[arg1.as_ref(), arg2.as_ref()])
+        }
+        CmdVal::Double(name, arg1) => mpv.command(&name.to_string(), &[arg1.as_ref()]),
+        CmdVal::Single((name,)) => mpv.command(&name.to_string(), &[]),
+    };
+    if let Err(error) = result {
+        eprintln!("failed to execute MPV command: '{error:#}'")
+    }
+}
+
+fn process_mpv_message(msg: String, event_context: &mut EventContext, mpv: &Mpv) {
+    let in_msg: InMsg = match serde_json::from_str(&msg) {
+        Ok(in_msg) => in_msg,
+        Err(error) => {
+            eprintln!("cannot parse InMsg:{:?} {error:#}", &msg);
+            return;
+        }
+    };
+
+    let observe = |name: String, format: Format| {
+        if let Err(error) = event_context.observe_property(&name, format, 0) {
+            eprintln!("cannot observe MPV property {name}: '{error:#}'");
+        }
+    };
+
+    match in_msg {
+        InMsg(InMsgFn::MpvObserveProp, InMsgArgs::ObProp(PropKey::Bool(prop))) => {
+            observe(prop.to_string(), Format::Flag);
+        }
+        InMsg(InMsgFn::MpvObserveProp, InMsgArgs::ObProp(PropKey::Int(prop))) => {
+            observe(prop.to_string(), Format::Int64);
+        }
+        InMsg(InMsgFn::MpvObserveProp, InMsgArgs::ObProp(PropKey::Fp(prop))) => {
+            observe(prop.to_string(), Format::Double);
+        }
+        InMsg(InMsgFn::MpvObserveProp, InMsgArgs::ObProp(PropKey::Str(prop))) => {
+            observe(prop.to_string(), Format::String);
+        }
+        InMsg(InMsgFn::MpvSetProp, InMsgArgs::StProp(name, PropVal::Bool(value))) => {
+            set_mpv_property(name, value, mpv);
+        }
+        InMsg(InMsgFn::MpvSetProp, InMsgArgs::StProp(name, PropVal::Num(value))) => {
+            set_mpv_property(name, value, mpv);
+        }
+        InMsg(InMsgFn::MpvSetProp, InMsgArgs::StProp(name, PropVal::Str(value))) => {
+            let value = if name.to_string() == "vo" {
+                let mut value = value;
+                if !value.is_empty() && !value.ends_with(',') {
+                    value.push(',');
+                }
+                value.push_str("gpu-next,");
+                value
+            } else {
+                value
+            };
+            set_mpv_property(name, value, mpv);
+        }
+        InMsg(InMsgFn::MpvCommand, InMsgArgs::Cmd(cmd)) => send_mpv_command(&cmd, mpv),
+        msg => eprintln!("MPV unsupported message: '{msg:?}'"),
+    }
+}
+
 fn create_event_thread(
     mpv: Arc<Mpv>,
-    observe_property_receiver: Receiver<ObserveProperty>,
+    in_msg_receiver: Receiver<String>,
     rpc_response_sender: Sender<String>,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
@@ -261,14 +349,16 @@ fn create_event_thread(
         // -- Event handler loop --
 
         loop {
-            for ObserveProperty { name, format } in observe_property_receiver.drain() {
-                event_context
-                    .observe_property(&name, format, 0)
-                    .expect("failed to observer MPV property");
+            // libmpv is explicitly single-threaded. Handle every command and
+            // property update on the same thread that drains its event queue;
+            // this prevents a source click from deadlocking against wait_event.
+            for msg in in_msg_receiver.try_iter() {
+                process_mpv_message(msg, &mut event_context, &mpv);
             }
 
-            // -1.0 means to block and wait for an event.
-            let event = match event_context.wait_event(-1.) {
+            // A short timeout keeps IPC responsive without calling libmpv from
+            // a second thread. Commands are picked up within 100 ms.
+            let event = match event_context.wait_event(0.1) {
                 Some(Ok(event)) => event,
                 Some(Err(error)) => {
                     eprintln!("Event errored: {error:?}");
@@ -304,131 +394,3 @@ fn create_event_thread(
     })
 }
 
-fn create_message_thread(
-    mpv: Arc<Mpv>,
-    observe_property_sender: Sender<ObserveProperty>,
-    in_msg_receiver: Receiver<String>,
-) -> JoinHandle<()> {
-    thread::spawn(move || {
-        // -- Helpers --
-
-        let observe_property = |name: String, format: Format| {
-            observe_property_sender
-                .send(ObserveProperty { name, format })
-                .expect("cannot send ObserveProperty");
-            mpv.wake_up();
-        };
-
-        let send_command = |cmd: &CmdVal| {
-            if cmd_is_loadfile(cmd) {
-                apply_stored_player_volume(&mpv);
-                apply_loadfile_profile(cmd, &mpv);
-            }
-            let cmd = cmd.clone();
-            let a1;
-            let a2;
-            let a3;
-            let a4;
-            let (name, args) = match cmd {
-                CmdVal::Quintuple(name, arg1, arg2, arg3, arg4) => {
-                    a1 = format!(r#""{arg1}""#);
-                    a2 = format!(r#""{arg2}""#);
-                    a3 = format!(r#""{arg3}""#);
-                    a4 = format!(r#""{arg4}""#);
-                    (
-                        name,
-                        vec![a1.as_ref(), a2.as_ref(), a3.as_ref(), a4.as_ref()],
-                    )
-                }
-                CmdVal::Quadruple(name, arg1, arg2, arg3) => {
-                    a1 = format!(r#""{arg1}""#);
-                    a2 = format!(r#""{arg2}""#);
-                    a3 = format!(r#""{arg3}""#);
-                    (name, vec![a1.as_ref(), a2.as_ref(), a3.as_ref()])
-                }
-                CmdVal::Tripple(name, arg1, arg2) => {
-                    a1 = format!(r#""{arg1}""#);
-                    a2 = format!(r#""{arg2}""#);
-                    (name, vec![a1.as_ref(), a2.as_ref()])
-                }
-                CmdVal::Double(name, arg1) => {
-                    a1 = format!(r#""{arg1}""#);
-                    (name, vec![a1.as_ref()])
-                }
-                CmdVal::Single((name,)) => (name, vec![]),
-            };
-            if let Err(error) = mpv.command(&name.to_string(), &args) {
-                eprintln!("failed to execute MPV command: '{error:#}'")
-            }
-        };
-
-        fn set_property(name: impl ToString, value: impl SetData, mpv: &Mpv) {
-            if let Err(error) = mpv.set_property(&name.to_string(), value) {
-                eprintln!("cannot set MPV property: '{error:#}'")
-            }
-        }
-
-        // -- InMsg handler loop --
-
-        for msg in in_msg_receiver.iter() {
-            let in_msg: InMsg = match serde_json::from_str(&msg) {
-                Ok(in_msg) => in_msg,
-                Err(error) => {
-                    eprintln!("cannot parse InMsg:{:?} {error:#}", &msg);
-                    continue;
-                }
-            };
-
-            match in_msg {
-                InMsg(InMsgFn::MpvObserveProp, InMsgArgs::ObProp(PropKey::Bool(prop))) => {
-                    observe_property(prop.to_string(), Format::Flag);
-                }
-                InMsg(InMsgFn::MpvObserveProp, InMsgArgs::ObProp(PropKey::Int(prop))) => {
-                    observe_property(prop.to_string(), Format::Int64);
-                }
-                InMsg(InMsgFn::MpvObserveProp, InMsgArgs::ObProp(PropKey::Fp(prop))) => {
-                    observe_property(prop.to_string(), Format::Double);
-                }
-                InMsg(InMsgFn::MpvObserveProp, InMsgArgs::ObProp(PropKey::Str(prop))) => {
-                    observe_property(prop.to_string(), Format::String);
-                }
-                InMsg(InMsgFn::MpvSetProp, InMsgArgs::StProp(name, PropVal::Bool(value))) => {
-                    set_property(name, value, &mpv);
-                }
-                InMsg(InMsgFn::MpvSetProp, InMsgArgs::StProp(name, PropVal::Num(value))) => {
-                    set_property(name, value, &mpv);
-                }
-                InMsg(InMsgFn::MpvSetProp, InMsgArgs::StProp(name, PropVal::Str(value))) => {
-                    let value = if name.to_string() == "vo" {
-                        let mut value = value;
-                        if !value.is_empty() && !value.ends_with(',') {
-                            value.push(',');
-                        }
-                        value.push_str("gpu-next,");
-                        value
-                    } else {
-                        value
-                    };
-                    set_property(name, value, &mpv);
-                }
-                InMsg(InMsgFn::MpvCommand, InMsgArgs::Cmd(cmd)) => {
-                    send_command(&cmd);
-                }
-                msg => {
-                    eprintln!("MPV unsupported message: '{msg:?}'");
-                }
-            }
-        }
-    })
-}
-
-trait MpvExt {
-    fn wake_up(&self);
-}
-
-impl MpvExt for Mpv {
-    // @TODO create a PR to the `libmpv` crate and then remove `libmpv-sys` from Cargo.toml?
-    fn wake_up(&self) {
-        unsafe { libmpv2_sys::mpv_wakeup(self.ctx.as_ptr()) }
-    }
-}

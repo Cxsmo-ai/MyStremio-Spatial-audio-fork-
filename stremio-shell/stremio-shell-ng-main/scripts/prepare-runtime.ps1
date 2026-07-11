@@ -122,6 +122,8 @@ function Ensure-WebUiScript {
 
 $SmartVibranceScript = Join-Path $ProjectRoot "assets\custom_smart_vibrance.js"
 Ensure-WebUiScript -WebUiOut (Join-Path $OutputDir "webui") -ScriptSource $SmartVibranceScript -ScriptName "mystremio-smart-vibrance.js"
+$TidalTabScript = Join-Path $ProjectRoot "assets\custom_tidal_tab.js"
+Ensure-WebUiScript -WebUiOut (Join-Path $OutputDir "webui") -ScriptSource $TidalTabScript -ScriptName "mystremio-tidal-tab.js"
 
 # libmpv DLL: build.rs extracts/copies it to project root during cargo build.
 $LibMpvCandidates = @(

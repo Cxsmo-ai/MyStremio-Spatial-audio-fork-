@@ -363,7 +363,14 @@ impl MainWindow {
                                     arg_lc.starts_with("mpv://").then(|| &arg[6..])
                                 {
                                     // `--` ends mpv's option parsing; the stream URL can't smuggle flags.
+                                    let portable_root = std::env::current_exe()
+                                        .ok()
+                                        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+                                    let portable_mpv = portable_root
+                                        .as_ref()
+                                        .map(|p| p.join("mpv.exe").to_string_lossy().to_string());
                                     let mpv_paths: Vec<String> = vec![
+                                        portable_mpv,
                                         std::env::var("ProgramFiles")
                                             .ok()
                                             .map(|v| format!("{v}\\mpv\\mpv.exe")),
@@ -382,7 +389,13 @@ impl MainWindow {
                                     .flatten()
                                     .collect();
                                     for path in &mpv_paths {
-                                        if Command::new(path)
+                                        let mut command = Command::new(path);
+                                        if let Some(root) = &portable_root {
+                                            if std::path::Path::new(path).parent() == Some(root.as_path()) {
+                                                command.arg(format!("--config-dir={}", root.join("portable_config").display()));
+                                            }
+                                        }
+                                        if command
                                             .arg("--")
                                             .arg(stream_url)
                                             .creation_flags(CREATE_BREAKAWAY_FROM_JOB)

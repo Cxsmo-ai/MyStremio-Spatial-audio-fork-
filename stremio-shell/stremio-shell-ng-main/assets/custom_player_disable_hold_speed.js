@@ -202,6 +202,10 @@
       'mousedown',
       (event) => {
         if (event.button !== 0) return;
+        // A stream card also produces a left mouse-down. Do not start the
+        // speed-enforcement interval until the native player route exists;
+        // otherwise source selection can flood MPV while it is loading.
+        if (!isPlayerRoute()) return;
         leftMouseDown = true;
         if (isSpeedMenuInteraction(event.target)) {
           userSpeedChangeUntil = Date.now() + 3000;
@@ -265,6 +269,10 @@
     scheduleHookRefresh();
   });
   window.addEventListener('hashchange', () => {
+    // The previous page may never deliver its mouseup after a navigation.
+    // Reset the gesture state before the player begins receiving commands.
+    leftMouseDown = false;
+    stopEnforce();
     if (isPlayerRoute()) scheduleHookRefresh();
   });
 

@@ -1,3 +1,20 @@
 /target
 /stremio*.exe
 /libmpv-2.dll
+
+# Local TIDAL credentials and sessions. Never commit these files.
+**/.env
+**/.env.*
+!**/.env.example
+**/token.json
+**/token.json.*
+**/tidalapi-session.json
+
+# Local playback/auth diagnostics can contain signed media URLs or headers.
+*.log
+*.out.log
+*.err.log
+
+# Local browser/CDP patch helpers; keep these outside public releases.
+scripts/cdp-eval.ps1
+scripts/patch-internal-stream-player.ps1

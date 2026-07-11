@@ -25,6 +25,11 @@
     return PLAYER_ROUTE.test(location.hash || '');
   }
 
+  // Only a player route that existed when the document was first loaded can
+  // be stale persisted state. A route entered later is a real user playback
+  // handoff and must not be replaced while MPV is still opening the source.
+  const initialPlayerRoute = isPlayerRoute();
+
   function isColdStartActive() {
     return Date.now() < coldStartEndsAt && !streamSessionAllowed;
   }
@@ -54,7 +59,7 @@
   }
 
   function redirectStalePlayerRoute(reason) {
-    if (!isPlayerRoute() || streamSessionAllowed) return false;
+    if (!initialPlayerRoute || !isPlayerRoute() || streamSessionAllowed) return false;
     const target = boardUrl();
     if (`${location.pathname}${location.search}${location.hash}` === target) return false;
     console.info(`[StremioCustom] ${reason} — redirecting to board`);
@@ -140,6 +145,12 @@
     if (window.__stremioCustomBootstrapReady) return;
     if (!isPlayerRoute()) {
       ensureOpaqueFallback();
+      return;
+    }
+    if (!initialPlayerRoute) {
+      // A fresh source click has already established a valid player session;
+      // the first MPV path/time event can arrive asynchronously.
+      allowPlayerSession('route');
       return;
     }
     if (isColdStartActive()) {
