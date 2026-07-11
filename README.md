@@ -169,15 +169,7 @@ MyStremio now supports pure, uncompressed Dolby Atmos playback natively from TID
 
 ### 2.3.0
 
-- **Tidal Atmos Integration** — Added the Omniphony Tidal Luna plugin to seamlessly intercept Tidal audio and pass bit-perfect Atmos manifests to the `orender` spatial engine.
-- **Binlossless API** — Packaged a local daemon that handles Tidal authentication and extracts raw Atmos manifests.
-- **Portable Auth Tool** — Added `auth-tidal.bat` to safely authenticate user credentials locally without exposing tokens in the repository or portable zip.
-- **Portable Distribution Release** — Removed all personal caching/appdata for a clean spatial-audio-focused public release (`v2.3.0-atmos-portable`).
-
-### 2.3.0
-
-- **Tidal Atmos Integration** — Added the Omniphony Tidal Luna plugin to seamlessly intercept Tidal audio and pass bit-perfect Atmos manifests to the orender spatial engine.
-- **Binlossless API** — Packaged a local daemon that handles Tidal authentication and extracts raw Atmos manifests.
+- **Tidal Atmos Integration** — Packaged the Binlossless API as a local daemon that handles Tidal authentication and extracts raw Atmos manifests, piping them directly to the orender spatial engine.
 - **Portable Auth Tool** — Added uth-tidal.bat to safely authenticate user credentials locally without exposing tokens in the repository or portable zip.
 - **Portable Distribution Release** — Removed all personal caching/appdata for a clean spatial-audio-focused public release (2.3.0-atmos-portable).
 
